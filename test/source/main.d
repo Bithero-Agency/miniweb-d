@@ -24,5 +24,6 @@ Response doThing(Request r, HeaderBag h) {
     writeln(" headers: ", h);
     auto resp = Response.build_200_OK();
     resp.headers.set("Bla", "blup");
+    resp.setBody("Hello world :D");
     return resp;
 }
