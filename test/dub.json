@@ -1,0 +1,13 @@
+{
+	"name": "test",
+    "authors": [
+        "Mai-Lapyst"
+    ],
+    "copyright": "Copyright © 2023, Mai-Lapyst",
+    "license": "AGPL-3.0-or-later",
+    "dependencies": {
+        "miniweb": {
+            "path": ".."
+        }
+    }
+}

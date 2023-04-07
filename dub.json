@@ -1,0 +1,20 @@
+{
+	"name": "miniweb",
+	"authors": [
+		"Mai-Lapyst"
+	],
+	"copyright": "Copyright © 2023, Mai-Lapyst",
+	"dependencies": {
+		"miniasync": "~>0.3.1",
+		"miniweb:http": {
+			"path": "./subpackages/http"
+		}
+	},
+	"description": "A minimal web framework",
+	"license": "AGPL-3.0-or-later",
+	"targetType": "library",
+	"subPackages": [
+		"./test",
+		"./subpackages/http"
+	]
+}
