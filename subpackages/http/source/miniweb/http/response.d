@@ -233,6 +233,18 @@ class Response {
 	}
 
 	/**
+	 * Sets the body to the given string and optionaly uses the supplied mimetype as
+	 * value for the HTTP `Content-Type` header.
+	 * 
+	 * Params:
+	 *   str = the string the body should have
+	 *   mime_type = the mime-type of the response; `test/plain` by default
+	 */
+	void setBody(string str, string mime_type = "text/plain") {
+		this._respBody = new StringBody(str, mime_type);
+	}
+
+	/**
 	 * Builds a Response with the `200 OK` response code.
 	 * 
 	 * Returns: a new response, preconfigured with the `200 OK` response code.

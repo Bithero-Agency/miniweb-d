@@ -52,3 +52,26 @@ interface ResponseBody {
 	void sendTo(HttpClient client);
 
 }
+
+/**
+ * A string as response body; allows also for specifing an mime type to use.
+ */
+class StringBody : ResponseBody {
+	private string str;
+	private string mime_type;
+
+	this(string str, string mime_type) {
+		this.str = str;
+		this.mime_type = mime_type;
+	}
+
+	void modifyHeaders(HeaderBag headers, HttpClient client) {
+		import std.conv : to;
+		headers.set("Content-Length", to!string(str.length));
+		headers.set("Content-Type", mime_type);
+	}
+
+	void sendTo(HttpClient client) {
+		client.write(str);
+	}
+}
