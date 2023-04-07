@@ -32,6 +32,7 @@ void doSomething() {
 Response returnSomething(HeaderBag headers) {
     auto resp = Response.build_200_OK();
     resp.headers.set("X-My-Header", headers.get("X-My-Header"));
+    resp.setBody("Hello world!");
     return resp;
 }
 ```
