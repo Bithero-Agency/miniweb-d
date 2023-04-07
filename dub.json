@@ -10,7 +10,7 @@
 			"path": "./subpackages/http"
 		}
 	},
-	"description": "A minimal web framework",
+	"description": "A minimal yet complete web framework",
 	"license": "AGPL-3.0-or-later",
 	"targetType": "library",
 	"subPackages": [
