@@ -35,6 +35,9 @@ interface HttpClient {
 	/// Reads one line
 	string readLine();
 
+	/// Writes the buffer
+	void write(const(void)[] buffer);
+
 	/// Writes one line
 	void writeLine(string line);
 }
@@ -166,7 +169,11 @@ abstract class BaseHttpClient : HttpClient {
 		return line;
 	}
 
-	override void writeLine(string line) {
+	void write(const(void)[] buffer) {
+		this.nativeWrite(buffer);
+	}
+
+	void writeLine(string line) {
 		this.nativeWrite(line ~ "\r\n");
 	}
 
