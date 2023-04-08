@@ -23,7 +23,12 @@ void my_server_shutdown() {
     writeln("Called on server shutdown!");
 }
 
-@Route("/doThing") @Middleware("a")
+@Route("/doOther")
+void doOther() {}
+
+@Route("/doThing")
+@Middleware("a")
+@Middleware((r) { writeln("Applying functional middleware..."); return MaybeResponse.none(); })
 Response doThing(Request r, HeaderBag h, URI uri) {
     writeln("Got request on doThing!");
     writeln(" req: ", r);

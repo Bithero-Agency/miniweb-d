@@ -137,11 +137,28 @@ class Router {
         foreach (ent; routes) {
             if (ent.m.matches(req)) {
                 foreach (mw_spec; ent.middlewares) {
-                    auto mw_p = mw_spec.name in middlewares;
-                    if (mw_p !is null) {
-                        auto r = (*mw_p)(req);
-                        if (r.isSome()) {
-                            return r.take();
+                    import std.stdio;
+                    writeln("try middleware... ", mw_spec);
+                    final switch (mw_spec.kind) {
+                        case Middleware.Kind.NO:
+                            throw new Exception("Tried to call invalid middleware");
+                        case Middleware.Kind.NAMED: {
+                            auto mw_p = mw_spec.name in middlewares;
+                            if (mw_p !is null) {
+                                auto r = (*mw_p)(req);
+                                if (r.isSome()) {
+                                    return r.take();
+                                }
+                            }
+                            break;
+                        }
+                        case Middleware.Kind.FN:
+                        case Middleware.Kind.DG: {
+                            auto r = mw_spec(req);
+                            if (r.isSome()) {
+                                return r.take();
+                            }
+                            break;
                         }
                     }
                 }
@@ -250,7 +267,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
     Router r = new Router();
 
     foreach (mod; Modules) {
-        static foreach (fn; getSymbolsByUDA!(mod, RegisterMiddleware)) {
+        foreach (fn; getSymbolsByUDA!(mod, RegisterMiddleware)) {
             static assert(isFunction!fn, "`" ~ __traits(identifier, fn) ~ "` is annotated with @RegisterMiddleware but isn't a function");
             foreach (uda; getUDAs!(fn, RegisterMiddleware)) {
                 auto p = uda.name in r.middlewares;
@@ -279,7 +296,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
             }
         }
 
-        static foreach (fn; getSymbolsByUDA!(mod, Route)) {
+        foreach (fn; getSymbolsByUDA!(mod, Route)) {
             static assert(isFunction!fn, "`" ~ __traits(identifier, fn) ~ "` is annotated with @Route but isn't a function");
 
             // TODO: support various ways a handler can be called...
@@ -288,16 +305,18 @@ Router initRouter(Modules...)(ServerConfig conf) {
             alias args = MakeCallDispatcher!(fn, infos);
 
             DList!Middleware middlewares;
-            static foreach (mw_uda; getUDAs!(fn, Middleware)) {
-                auto p = mw_uda.name in r.middlewares;
-                if (p is null) {
-                    assert(0, "Cannot use middleware `" ~ mw_uda.name ~ "` on `" ~ fullyQualifiedName!fn ~ "` since no such middleware exists");
+            foreach (mw_uda; getUDAs!(fn, Middleware)) {
+                if (mw_uda.kind == Middleware.Kind.NAMED) {
+                    auto p = mw_uda.name in r.middlewares;
+                    if (p is null) {
+                        assert(0, "Cannot use middleware `" ~ mw_uda.name ~ "` on `" ~ fullyQualifiedName!fn ~ "` since no such middleware exists");
+                    }
                 }
 
                 middlewares.insertBack(mw_uda);
             }
 
-            static foreach (r_uda; getUDAs!(fn, Route)) {
+            foreach (r_uda; getUDAs!(fn, Route)) {
                 r.addRoute(r_uda, middlewares, (Request req) {
                     pragma(msg, "Creating route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
                     pragma(msg, "  Routing spec is: ", r_uda);
