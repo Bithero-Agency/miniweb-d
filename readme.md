@@ -41,6 +41,8 @@ Miniweb has the ability to analyse annotated functions and call them with any or
 Currently supported are:
 - `Request` get the raw request
 - `HeaderBag` get the headers of the request
+- `URI` get the uri of the request
+- `QueryParamBag` get the query params of the request
 
 ## Roadmap
 
