@@ -33,6 +33,7 @@ public import miniweb.main;
 public import miniweb.routing;
 public import miniweb.http;
 public import miniweb.client;
+public import miniweb.middlewares;
 
 /** 
  * Handles a client

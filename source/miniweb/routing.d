@@ -28,6 +28,10 @@ module miniweb.routing;
 import miniweb.http;
 import miniweb.config;
 import miniweb.utils;
+import miniweb.middlewares;
+import async.utils : Option;
+
+alias MaybeResponse = Option!Response;
 
 import std.container : DList;
 
@@ -119,6 +123,7 @@ private:
 private struct RouteEntry {
     Matcher m;
     Handler handler;
+    DList!Middleware middlewares;
 }
 
 /** 
@@ -126,24 +131,41 @@ private struct RouteEntry {
  */
 class Router {
     private DList!RouteEntry routes;
+    private Callable!MaybeResponse[string] middlewares;
 
     Response route(Request req) {
         foreach (ent; routes) {
             if (ent.m.matches(req)) {
+                foreach (mw_spec; ent.middlewares) {
+                    auto mw_p = mw_spec.name in middlewares;
+                    if (mw_p !is null) {
+                        auto r = (*mw_p)(req);
+                        if (r.isSome()) {
+                            return r.take();
+                        }
+                    }
+                }
+
                 return ent.handler(req);
             }
         }
         return null;
     }
 
-    void addRoute(T)(Route r, T delegate(Request) dg) {
+    void addRoute(T)(Route r, DList!Middleware mws, T delegate(Request) dg) {
         Callable!T cb;
         cb.set(dg);
         routes.insertBack(
             RouteEntry(
-                Matcher(r.route), Handler.from(cb)
+                Matcher(r.route), Handler.from(cb), mws
             )
         );
+    }
+
+    void addMiddleware(string name, MaybeResponse delegate(Request) dg) {
+        Callable!MaybeResponse cb;
+        cb.set(dg);
+        middlewares[name] = cb;
     }
 }
 
@@ -155,7 +177,7 @@ class Router {
  *   fn = the route handler function
  *   paramInfos = parameterinfos of `fn`; aqquired from $(REF miniweb.utils.GetParameterInfo)
  */
-template MakeCallDispatcher(alias fn, paramInfos...) {
+private template MakeCallDispatcher(alias fn, paramInfos...) {
     import std.traits : fullyQualifiedName, Unconst, ParameterStorageClass;
     static if (paramInfos.length < 4) {
         enum MakeCallDispatcher = "";
@@ -228,17 +250,61 @@ Router initRouter(Modules...)(ServerConfig conf) {
     Router r = new Router();
 
     foreach (mod; Modules) {
-        foreach (fn; getSymbolsByUDA!(mod, Route)) {
+        static foreach (fn; getSymbolsByUDA!(mod, RegisterMiddleware)) {
+            static assert(isFunction!fn, "`" ~ __traits(identifier, fn) ~ "` is annotated with @RegisterMiddleware but isn't a function");
+            foreach (uda; getUDAs!(fn, RegisterMiddleware)) {
+                auto p = uda.name in r.middlewares;
+                if (p !is null) {
+                    assert(0, "Cannot register `" ~ fullyQualifiedName!fn ~ "` as middleware `" ~ uda.name ~ "` since a same named middleware already exists");
+                }
+
+                alias infos = GetParameterInfo!fn;
+                alias args = MakeCallDispatcher!(fn, infos);
+                static if (is(ReturnType!fn == void)) {
+                    pragma(msg, "Creating middleware handler on `" ~ fullyQualifiedName!fn ~ "` named '" ~ uda.name ~ "', calling with: `" ~ args ~ "`");
+                    r.addMiddleware(uda.name, (Request req) {
+                        mixin( "fn(" ~ args ~ ");" );
+                        return MaybeResponse.none();
+                    });
+                }
+                static if (is(ReturnType!fn == Option!Response)) {
+                    pragma(msg, "Creating middleware handler on `" ~ fullyQualifiedName!fn ~ "` named '" ~ uda.name ~ "', calling with: `" ~ args ~ "`");
+                    r.addMiddleware(uda.name, (Request req) {
+                        mixin( "return fn(" ~ args ~ ");" );
+                    });
+                }
+                else {
+                    static assert(0, "`" ~ fullyQualifiedName!fn ~ "` needs to have either void or Option!Response as returntype");
+                }
+            }
+        }
+
+        static foreach (fn; getSymbolsByUDA!(mod, Route)) {
             static assert(isFunction!fn, "`" ~ __traits(identifier, fn) ~ "` is annotated with @Route but isn't a function");
 
             // TODO: support various ways a handler can be called...
 
             alias infos = GetParameterInfo!fn;
             alias args = MakeCallDispatcher!(fn, infos);
-            foreach (uda; getUDAs!(fn, Route)) {
-                r.addRoute(uda, (Request req) {
+
+            DList!Middleware middlewares;
+            static foreach (mw_uda; getUDAs!(fn, Middleware)) {
+                auto p = mw_uda.name in r.middlewares;
+                if (p is null) {
+                    assert(0, "Cannot use middleware `" ~ mw_uda.name ~ "` on `" ~ fullyQualifiedName!fn ~ "` since no such middleware exists");
+                }
+
+                middlewares.insertBack(mw_uda);
+            }
+
+            static foreach (r_uda; getUDAs!(fn, Route)) {
+                r.addRoute(r_uda, middlewares, (Request req) {
                     pragma(msg, "Creating route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
-                    pragma(msg, "  Routing spec is: ", uda);
+                    pragma(msg, "  Routing spec is: ", r_uda);
+                    pragma(msg, "  Middlewares applied: ");
+                    static foreach (mw_uda; getUDAs!(fn, Middleware)) {
+                        pragma(msg, "   - ", mw_uda);
+                    }
                     static if (is(ReturnType!fn == void)) {
                         mixin( "fn(" ~ args ~ ");" );
                     } else static if (is(ReturnType!fn == Response)) {

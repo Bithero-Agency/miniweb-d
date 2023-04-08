@@ -6,6 +6,12 @@ import std.stdio;
 
 mixin MiniWebMain!test;
 
+@RegisterMiddleware("a")
+MaybeResponse myfun() {
+    writeln("Applying myfun middleware...");
+    return MaybeResponse.none();
+}
+
 @OnServerStart
 void my_server_conf(ServerConfig conf) {
     writeln("Called on server start!");
@@ -17,7 +23,7 @@ void my_server_shutdown() {
     writeln("Called on server shutdown!");
 }
 
-@Route("/doThing")
+@Route("/doThing") @Middleware("a")
 Response doThing(Request r, HeaderBag h, URI uri) {
     writeln("Got request on doThing!");
     writeln(" req: ", r);
