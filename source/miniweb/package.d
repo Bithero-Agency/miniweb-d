@@ -139,6 +139,7 @@ int miniwebRunServer(ServerConfig conf, Router r) {
 		gscheduler.schedule(() {
 			handleClient(client, r, conf);
 			client.shutdownSync(SocketShutdown.BOTH);
+			client.closeSync();
 		});
 	}
 
