@@ -46,7 +46,6 @@ Currently supported are:
 
 ## Roadmap
 
-- Middlewares
 - More bodytypes to move data
 - Allowing more returntypes, i.e. auto-serializing
 - Allowing detection of more request parameters
