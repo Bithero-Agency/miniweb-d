@@ -195,6 +195,12 @@ template MakeCallDispatcher(alias fn, paramInfos...) {
         else static if (is(plainParamTy == HeaderBag)) {
             enum MakeCallDispatcher = "req.headers," ~ tail;
         }
+        else static if (is(plainParamTy == URI)) {
+            enum MakeCallDispatcher = "req.uri," ~ tail;
+        }
+        else static if (is(plainParamTy == QueryParamBag)) {
+            enum MakeCallDispatcher = "req.uri.queryparams," ~ tail;
+        }
         else {
             static assert(
                 0, "Cannot compile dispatcher: unknown type `" ~ fullyQualifiedName!paramTy ~ "`"
