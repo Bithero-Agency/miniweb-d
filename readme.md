@@ -44,6 +44,36 @@ Currently supported are:
 - `URI` get the uri of the request
 - `QueryParamBag` get the query params of the request
 
+To use middlewares you have two options, either create a named one or use functionals:
+```d
+@RegisterMiddleware("my_middleware")    // registers a named middleware
+MaybeResponse handler(Request req) {
+    return MaybeResponse.none();    // returns a Option!Response with no value set,
+                                    // which effectivly means to call either the next middleware
+                                    // or the handler.
+}
+
+// Middlewares can either return MaybeResponse or void and have
+// the same freedom in their parameters as normal route handlers
+@RegisterMiddleware("other")
+void otherHandler() {}
+
+@Route("/returnSomething")
+@Middleware("my_middleware")    // applies a named middleware
+Response returnSomething(HeaderBag headers) {
+    // ...
+}
+
+@Route("/someWhereOther")
+// This is a functional middleware, it accepts a delegate/function directly
+@Middleware((req) {
+    return MaybeReponse.none();
+})
+Response someWhereOther() {
+    // ...
+}
+```
+
 ## Roadmap
 
 - More bodytypes to move data
