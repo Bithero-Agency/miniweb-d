@@ -29,6 +29,7 @@ import miniweb.http.headers;
 import miniweb.http.client;
 import miniweb.http.method;
 import miniweb.http.httpversion;
+import miniweb.http.uri;
 
 /** 
  * Representing a HTTP request message
@@ -43,10 +44,9 @@ class Request {
 	/// The HTTP method; if this is $(REF miniweb.http.method.HttpMethod.custom), the real method is in $(REF raw_method)
 	private HttpMethod method;
 
-	/// The url path
-	private string path;
-	// TODO: add place for query params
-
+	/// The request uri
+	private URI uri;
+	
 	/// The http version of the request
 	private HttpVersion ver;
 
@@ -64,8 +64,8 @@ class Request {
 	}
 
 	/// Returns the URL path of the request
-	string getPath() {
-		return path;
+	URI getURI() {
+		return uri;
 	}
 
 	/// Gets the raw method of the request
@@ -122,7 +122,7 @@ Request parseRequest(HttpClient client) {
 	r.method = httpMethodFromString(requestLine[0]);
 	r.raw_method = requestLine[0];
 
-	r.path = requestLine[1];
+	r.uri = new URI(requestLine[1]);
 
 	r.ver = httpVersionFromString(requestLine[2]);
 

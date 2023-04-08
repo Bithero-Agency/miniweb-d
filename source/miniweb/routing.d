@@ -46,7 +46,7 @@ private struct Matcher {
     private string str;
 
     bool matches(Request req) {
-        return req.getPath() == str;
+        return req.getURI().path == str;
     }
 }
 

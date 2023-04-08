@@ -31,6 +31,7 @@ public import miniweb.http.response;
 public import miniweb.http.method;
 public import miniweb.http.httpversion;
 public import miniweb.http.body;
+public import miniweb.http.uri;
 
 import std.datetime.systime : SysTime;
 
