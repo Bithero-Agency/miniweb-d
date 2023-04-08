@@ -81,7 +81,7 @@ abstract class BaseHttpClient : HttpClient {
 
 		// if not enough, try recieving from the socket
 		char[1024] buffer;
-		while (true) {
+		while (count > 0) {
 			size_t received = this.nativeRead(buffer);
 
 			size_t n = min(received, count);
