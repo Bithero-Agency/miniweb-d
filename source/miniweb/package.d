@@ -35,6 +35,47 @@ public import miniweb.http;
 public import miniweb.client;
 public import miniweb.middlewares;
 
+/// Handles one request
+private void handleRequest(MiniWebHttpClient client, Router router, ServerConfig conf, Request req) {
+	Response resp = router.route(req);
+	if (resp is null) {
+		import std.stdio;
+		writeln("[handleRequest - ", client.getSocket().remoteAddress(), "] routing yielded no response...");
+		return;
+	}
+
+	if (resp.responseBody !is null) {
+		resp.responseBody.modifyHeaders(resp.headers, client);
+	}
+
+	if (conf.addDate && !resp.headers.has("Date")) {
+		import std.datetime;
+		auto currentTime = Clock.currTime();
+		resp.headers.set("Date", toHttpTimeFormat(currentTime));
+	}
+
+	final switch (conf.publishServerInfo) {
+		case ServerInfo.NONE: break;
+		case ServerInfo.NO_VERSION:
+			resp.headers.set("Server", "MiniWeb-d");
+			break;
+		case ServerInfo.FULL:
+			resp.headers.set("Server", "MiniWeb-d; v0.1.0");
+			break;
+		case ServerInfo.CUSTOM:
+			resp.headers.set("Server", conf.customServerInfo);
+			break;
+	}
+
+	if (resp.responseBody is null) {
+		// when no body was set, we set the contentsize to zero
+		// TODO: add an warning
+		resp.headers.set("Content-Length", "0");
+	}
+
+	sendResponse(req.httpVersion, resp, client);
+}
+
 /** 
  * Handles a client
  * 
@@ -48,42 +89,7 @@ private void handleClient(AsyncSocket sock, Router router, ServerConfig conf) {
 		auto client = new MiniWebHttpClient(sock);
 
 		Request req = parseRequest(client);
-
-		Response resp = router.route(req);
-		if (resp is null) {
-			throw new Exception("Routing yielded no response!");
-		}
-
-		if (resp.responseBody !is null) {
-			resp.responseBody.modifyHeaders(resp.headers, client);
-		}
-
-		if (conf.addDate && !resp.headers.has("Date")) {
-			import std.datetime;
-			auto currentTime = Clock.currTime();
-			resp.headers.set("Date", toHttpTimeFormat(currentTime));
-		}
-
-		final switch (conf.publishServerInfo) {
-			case ServerInfo.NONE: break;
-			case ServerInfo.NO_VERSION:
-				resp.headers.set("Server", "MiniWeb-d");
-				break;
-			case ServerInfo.FULL:
-				resp.headers.set("Server", "MiniWeb-d; v0.1.0");
-				break;
-			case ServerInfo.CUSTOM:
-				resp.headers.set("Server", conf.customServerInfo);
-				break;
-		}
-
-		if (resp.responseBody is null) {
-			// when no body was set, we set the contentsize to zero
-			// TODO: add an warning
-			resp.headers.set("Content-Length", "0");
-		}
-
-		sendResponse(req.httpVersion, resp, client);
+		handleRequest(client, router, conf, req);
 
 		if (req.httpVersion != HttpVersion.HTTP1_1) {
 			// close connection immedeatly after first request if not HTTP 1.1
@@ -98,7 +104,7 @@ private void handleClient(AsyncSocket sock, Router router, ServerConfig conf) {
 			else if (conn == "upgrade") { break; }
 
 			req = parseRequest(client);
-			router.route(req);
+			handleRequest(client, router, conf, req);
 		}
 
 	} catch (Throwable th) {
