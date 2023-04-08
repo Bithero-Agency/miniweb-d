@@ -53,6 +53,9 @@ class Request {
 	/// Storage for parsed headers
 	private HeaderBag _headers;
 
+	/// The request's body (if one is available)
+	private RequestBody _body = null;
+
 	this(HttpClient client) {
 		this.client = client;
 		this._headers = new HeaderBag();
@@ -86,6 +89,24 @@ class Request {
 	/// Gets the headers
 	@property HeaderBag headers() {
 		return this._headers;
+	}
+
+	/// Gets the request's body
+	@property RequestBody reqBody() {
+		return _body;
+	}
+}
+
+/**
+ * Represents the body of an request
+ */
+class RequestBody {
+	private void[] buffer;
+
+	private this() {}
+
+	void[] getBuffer() {
+		return buffer;
 	}
 }
 
@@ -172,7 +193,13 @@ Request parseRequest(HttpClient client) {
 		r._headers.append(key.toLower(), value);
 	}
 
-	// TODO: what should we do with the body?
+	// TODO: this needs to be made more secure...
+	if (r._headers.has("Content-Length")) {
+		import std.conv : to;
+		size_t contentLength = to!size_t( r._headers.getOne("Content-Length") );
+		r._body = new RequestBody();
+		r._body.buffer = client.read(contentLength);
+	}
 
 	return r;
 }
