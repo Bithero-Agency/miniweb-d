@@ -45,7 +45,7 @@ class Request {
 	private HttpMethod method;
 
 	/// The request uri
-	private URI uri;
+	private URI _uri;
 	
 	/// The http version of the request
 	private HttpVersion ver;
@@ -63,9 +63,14 @@ class Request {
 		return this.ver;
 	}
 
-	/// Returns the URL path of the request
+	/// Returns the URL of the request
 	URI getURI() {
-		return uri;
+		return _uri;
+	}
+
+	/// Returns the URL of the request
+	@property URI uri() {
+		return _uri;
 	}
 
 	/// Gets the raw method of the request
@@ -122,7 +127,7 @@ Request parseRequest(HttpClient client) {
 	r.method = httpMethodFromString(requestLine[0]);
 	r.raw_method = requestLine[0];
 
-	r.uri = new URI(requestLine[1]);
+	r._uri = new URI(requestLine[1]);
 
 	r.ver = httpVersionFromString(requestLine[2]);
 
