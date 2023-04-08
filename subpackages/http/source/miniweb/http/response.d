@@ -194,6 +194,11 @@ class Response {
 		this._headers = new HeaderBag();
 	}
 
+	this(HttpResponseCode code) {
+		this.code = code;
+		this._headers = new HeaderBag();
+	}
+
 	/**
 	 * Gets the http response code of the response.
 	 * 
