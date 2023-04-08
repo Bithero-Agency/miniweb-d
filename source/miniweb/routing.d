@@ -233,30 +233,20 @@ Router initRouter(Modules...)(ServerConfig conf) {
 
             // TODO: support various ways a handler can be called...
 
-            static if (is(ReturnType!fn == void)) {
-                foreach (uda; getUDAs!(fn, Route)) {
-                    r.addRoute(uda, (Request req) {
-                        alias infos = GetParameterInfo!fn;
-                        alias args = MakeCallDispatcher!(fn, infos);
-                        pragma(msg, "Creating void route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
-                        pragma(msg, "  Routing spec is: ", uda);
+            alias infos = GetParameterInfo!fn;
+            alias args = MakeCallDispatcher!(fn, infos);
+            foreach (uda; getUDAs!(fn, Route)) {
+                r.addRoute(uda, (Request req) {
+                    pragma(msg, "Creating route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
+                    pragma(msg, "  Routing spec is: ", uda);
+                    static if (is(ReturnType!fn == void)) {
                         mixin( "fn(" ~ args ~ ");" );
-                    });
-                }
-            }
-            else static if (is(ReturnType!fn == Response)) {
-                foreach (uda; getUDAs!(fn, Route)) {
-                    r.addRoute(uda, (Request req) {
-                        alias infos = GetParameterInfo!fn;
-                        alias args = MakeCallDispatcher!(fn, infos);
-                        pragma(msg, "Creating response route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
-                        pragma(msg, "  Routing spec is: ", uda);
+                    } else static if (is(ReturnType!fn == Response)) {
                         mixin( "return fn(" ~ args ~ ");" );
-                    });
-                }
-            }
-            else {
-                static assert(0, "`" ~ __traits(identifier, fn) ~ "` needs either void or Response as return type");
+                    } else {
+                        static assert(0, "`" ~ fullyQualifiedName!fn ~ "` needs either void or Response as return type");
+                    }
+                });
             }
 
         }
