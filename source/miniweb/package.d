@@ -40,8 +40,8 @@ private void handleRequest(MiniWebHttpClient client, Router router, ServerConfig
 	Response resp = router.route(req);
 	if (resp is null) {
 		import std.stdio;
-		writeln("[handleRequest - ", client.getSocket().remoteAddress(), "] routing yielded no response...");
-		return;
+		writeln("[handleRequest - ", client.getSocket().remoteAddress(), "] routing yielded no response - sending 404");
+		resp = new Response(HttpResponseCode.Not_Found_404);
 	}
 
 	if (resp.responseBody !is null) {
