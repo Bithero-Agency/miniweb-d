@@ -18,10 +18,11 @@ void my_server_shutdown() {
 }
 
 @Route("/doThing")
-Response doThing(Request r, HeaderBag h) {
+Response doThing(Request r, HeaderBag h, URI uri) {
     writeln("Got request on doThing!");
     writeln(" req: ", r);
     writeln(" headers: ", h);
+    writeln(" uri: ", uri.encode());
     auto resp = Response.build_200_OK();
     resp.headers.set("Bla", "blup");
     resp.setBody("Hello world :D");
