@@ -25,6 +25,10 @@ class URI {
 
 			auto entries = str.split("&");
 			foreach (e; entries) {
+				if (e.length <= 0) {
+					continue;
+				}
+
 				auto j = e.indexOf("=");
 				if (j >= 0) {
 					this._queryparams.set( e[0..j], std.uri.decodeComponent(e[j+1..$]) );
@@ -50,7 +54,7 @@ class URI {
 				querystr ~= key ~ "=" ~ std.uri.encodeComponent(value) ~ "&";
 			}
 		}
-		return std.uri.encode(_path) ~ querystr[0 .. $-1];
+		return std.uri.encode(_path) ~ "?" ~ querystr[0 .. $-1];
 	}
 
 	/// The path of the uri
