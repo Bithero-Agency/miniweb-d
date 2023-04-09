@@ -105,7 +105,7 @@ alias DELETE = Delete;
 
 /// Checks a condition if the request can be handled
 interface Matcher {
-    bool matches(Request req);
+    bool matches(Request req, ref RoutingStore store);
 }
 
 /// Checks if the request matches a specific route
@@ -116,7 +116,7 @@ private class RouteMatcher : Matcher {
         this.route = route;
     }
 
-    bool matches(Request req) {
+    bool matches(Request req, ref RoutingStore store) {
         return req.getURI().path == route;
     }
 }
@@ -129,14 +129,16 @@ private class MethodMatcher : Matcher {
         this.method = method;
     }
 
-    bool matches(Request req) {
+    bool matches(Request req, ref RoutingStore store) {
         if (req.getMethod() != method.method) {
+            store.non_match_couse_method = true;
             return false;
         }
         if (
             (method.method == HttpMethod.custom)
             && (req.getRawMethod() != method.raw_method)
         ) {
+            store.non_match_couse_method = true;
             return false;
         }
         return true;
@@ -214,14 +216,19 @@ private struct RouteEntry {
     Handler handler;
     DList!Middleware middlewares;
 
-    bool matches(Request req) {
+    bool matches(Request req, ref RoutingStore store) {
         foreach (m; matchers) {
-            if (!m.matches(req)) {
+            if (!m.matches(req, store)) {
                 return false;
             }
         }
         return true;
     }
+}
+
+/// Stores informations while routing
+private struct RoutingStore {
+    bool non_match_couse_method = false;
 }
 
 /** 
@@ -231,9 +238,10 @@ class Router {
     private RouteEntry[] routes;
     private Callable!MaybeResponse[string] middlewares;
 
-    Response route(Request req) {
+    Response route(Request req, ServerConfig conf) {
+        RoutingStore store;
         foreach (ent; routes) {
-            if (ent.matches(req)) {
+            if (ent.matches(req, store)) {
                 foreach (mw_spec; ent.middlewares) {
                     import std.stdio;
                     writeln("try middleware... ", mw_spec);
@@ -262,8 +270,15 @@ class Router {
                 }
 
                 return ent.handler(req);
+            } else {
+
             }
         }
+
+        if (store.non_match_couse_method && !conf.treat_405_as_404) {
+            return new Response(HttpResponseCode.Method_Not_Allowed_405);
+        }
+
         return null;
     }
 
@@ -466,7 +481,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
             foreach (r_uda; getUDAs!(fn, Route)) {
                 static if (hasUDA!(fn, Method)) {
                     foreach (m_uda; getUDAs!(fn, Method)) {
-                        addRoute!(fn, args, AliasSeq!( m_uda, r_uda ))(r, middlewares);
+                        addRoute!(fn, args, AliasSeq!( r_uda, m_uda ))(r, middlewares);
                     }
                 } else {
                     addRoute!(fn, args, AliasSeq!( r_uda ))(r, middlewares);

@@ -37,7 +37,7 @@ public import miniweb.middlewares;
 
 /// Handles one request
 private void handleRequest(MiniWebHttpClient client, Router router, ServerConfig conf, Request req) {
-	Response resp = router.route(req);
+	Response resp = router.route(req, conf);
 	if (resp is null) {
 		import std.stdio;
 		writeln("[handleRequest - ", client.getSocket().remoteAddress(), "] routing yielded no response - sending 404");
