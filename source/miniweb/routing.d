@@ -123,7 +123,7 @@ struct Header {
  * UDA to take out the value of the query params when applied to a handler's parameter (only for `string` and `string[]`).
  */
 struct QueryParam {
-    string name;
+    string name = null;
     string defaultValue = null;
 }
 
@@ -381,6 +381,7 @@ private template MakeCallDispatcher(alias fn) {
     alias storageclasses = ParameterStorageClassTuple!fn;
     alias types = Parameters!fn;
     alias identifiers = ParameterIdentifierTuple!fn;
+    alias defaultvalues = ParameterDefaults!fn;
 
     template Impl(size_t i = 0) {
         static if (i == types.length) {
@@ -391,6 +392,7 @@ private template MakeCallDispatcher(alias fn) {
             alias paramSc = storageclasses[i];
             alias paramTy = types[i .. i+1];
             alias paramId = identifiers[i];
+            alias paramDef = defaultvalues[i];
 
             alias plainParamTy = Unconst!paramTy;
 
@@ -462,17 +464,52 @@ private template MakeCallDispatcher(alias fn) {
                     );
                 }
 
-                static if (queryparam_udas[0].defaultValue !is null) {
-                    enum DefVal = "\"" ~ queryparam_udas[0].defaultValue ~ "\"";
+                alias qp_uda = queryparam_udas[0];
+
+                static if (is(qp_uda == QueryParam)) {
+                    static if (is(paramDef == void)) {
+                        enum DefVal = "null";
+                    }
+                    else static if (is(typeof(paramDef) == string)) {
+                        enum DefVal = "\"" ~ paramDef ~ "\"";
+                    }
+                    else {
+                        static assert (
+                            0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "`"
+                                ~ " has a default value which isn't a string"
+                        );
+                    }
+                    enum Name = paramId;
                 } else {
-                    enum DefVal = "null";
+                    static if (queryparam_udas[0].defaultValue !is null) {
+                        enum DefVal = "\"" ~ queryparam_udas[0].defaultValue ~ "\"";
+                    } else {
+                        static if (is(paramDef == void)) {
+                            enum DefVal = "null";
+                        }
+                        else static if (is(typeof(paramDef) == string)) {
+                            enum DefVal = "\"" ~ paramDef ~ "\"";
+                        }
+                        else {
+                            static assert (
+                                0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "`"
+                                    ~ " has a default value which isn't a string"
+                            );
+                        }
+                    }
+
+                    static if (queryparam_udas[0].name !is null) {
+                       enum Name = queryparam_udas[0].name;
+                    } else {
+                       enum Name = paramId;
+                    }
                 }
 
                 static if (is(plainParamTy == string)) {
-                    enum Impl = "req.uri.queryparams.getOne(\"" ~ queryparam_udas[0].name ~ "\"," ~ DefVal ~ ")," ~ tail;
+                    enum Impl = "req.uri.queryparams.getOne(\"" ~ Name ~ "\"," ~ DefVal ~ ")," ~ tail;
                 }
                 else static if (is(plainParamTy == string[])) {
-                    enum Impl = "req.uri.queryparams.get(\"" ~ queryparam_udas[0].name ~ "\"," ~ DefVal ~ ")," ~ tail;
+                    enum Impl = "req.uri.queryparams.get(\"" ~ Name ~ "\"," ~ DefVal ~ ")," ~ tail;
                 }
                 else {
                     static assert(
