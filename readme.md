@@ -28,7 +28,7 @@ void doSomething() {
     writeln("Does something!");
 }
 
-@Route("/returnSomething")
+@GET @Route("/returnSomething")
 Response returnSomething(HeaderBag headers) {
     auto resp = Response.build_200_OK();
     resp.headers.set("X-My-Header", headers.get("X-My-Header"));
