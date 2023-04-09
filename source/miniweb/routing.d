@@ -323,63 +323,70 @@ class Router {
  *   fn = the route handler function
  *   paramInfos = parameterinfos of `fn`; aqquired from $(REF miniweb.utils.GetParameterInfo)
  */
-private template MakeCallDispatcher(alias fn, paramInfos...) {
-    import std.traits : fullyQualifiedName, Unconst, ParameterStorageClass;
-    static if (paramInfos.length < 4) {
-        enum MakeCallDispatcher = "";
+private template MakeCallDispatcher(alias fn) {
+    import std.traits;
+
+    alias storageclasses = ParameterStorageClassTuple!fn;
+    alias types = Parameters!fn;
+    alias identifiers = ParameterIdentifierTuple!fn;
+
+    template Impl(size_t i = 0) {
+        static if (i == types.length) {
+            enum Impl = "";
+        } else {
+            alias tail = Impl!(i+1);
+
+            alias paramSc = storageclasses[i];
+            alias paramTy = types[i .. i+1];
+            alias paramId = identifiers[i];
+
+            alias plainParamTy = Unconst!paramTy;
+
+            import std.conv : to;
+            debug(miniweb_mkCallDisp) {
+                pragma(
+                    msg,
+                    "- fn: " ~ fullyQualifiedName!fn
+                        ~ " | ty:" ~ fullyQualifiedName!paramTy
+                        ~ " | id:" ~ paramId
+                        ~ " | sc:" ~ to!string(paramSc)
+                );
+            }
+
+            static if (paramSc != ParameterStorageClass.none) {
+                static assert(
+                    0, "Cannot compile dispatcher: disallowed storageclass `" ~ to!string(paramSc)[0 .. $-1] ~ "`"
+                        ~ " for parameter `" ~ paramId ~ "`"
+                        ~ " on function `" ~ fullyQualifiedName!fn ~ "`"
+                );
+            }
+
+            static if (is(plainParamTy == Request)) {
+                enum Impl = "req," ~ tail;
+            }
+            else static if (is(plainParamTy == HeaderBag)) {
+                enum Impl = "req.headers," ~ tail;
+            }
+            else static if (is(plainParamTy == URI)) {
+                enum Impl = "req.uri," ~ tail;
+            }
+            else static if (is(plainParamTy == QueryParamBag)) {
+                enum Impl = "req.uri.queryparams," ~ tail;
+            }
+            else static if (is(plainParamTy == HttpMethod)) {
+                enum Impl = "req.method," ~ tail;
+            }
+            else {
+                static assert(
+                    0, "Cannot compile dispatcher: unknown type `" ~ fullyQualifiedName!paramTy ~ "`"
+                        ~ " for parameter `" ~ paramId ~ "`"
+                        ~ " on function `" ~ fullyQualifiedName!fn ~ "`"
+                );
+            }
+        }
     }
-    else {
-        alias tail = MakeCallDispatcher!(fn, paramInfos[4 .. $]);
-        alias info = paramInfos[0 .. 4];
 
-        alias paramSc = info[0];
-        alias paramTy = info[1];
-        alias paramId = info[2];
-
-        alias plainParamTy = Unconst!paramTy;
-
-        import std.conv : to;
-        debug(miniweb_mkCallDisp) {
-            pragma(
-                msg,
-                "- fn: " ~ fullyQualifiedName!fn
-                    ~ " | ty:" ~ fullyQualifiedName!paramTy
-                    ~ " | id:" ~ paramId
-                    ~ " | sc:" ~ to!string(paramSc)
-            );
-        }
-
-        static if (paramSc != ParameterStorageClass.none) {
-            static assert(
-                0, "Cannot compile dispatcher: disallowed storageclass `" ~ to!string(paramSc)[0 .. $-1] ~ "`"
-                    ~ " for parameter `" ~ paramId ~ "`"
-                    ~ " on function `" ~ fullyQualifiedName!fn ~ "`"
-            );
-        }
-
-        static if (is(plainParamTy == Request)) {
-            enum MakeCallDispatcher = "req," ~ tail;
-        }
-        else static if (is(plainParamTy == HeaderBag)) {
-            enum MakeCallDispatcher = "req.headers," ~ tail;
-        }
-        else static if (is(plainParamTy == URI)) {
-            enum MakeCallDispatcher = "req.uri," ~ tail;
-        }
-        else static if (is(plainParamTy == QueryParamBag)) {
-            enum MakeCallDispatcher = "req.uri.queryparams," ~ tail;
-        }
-        else static if (is(plainParamTy == HttpMethod)) {
-            enum MakeCallDispatcher = "req.method," ~ tail;
-        }
-        else {
-            static assert(
-                0, "Cannot compile dispatcher: unknown type `" ~ fullyQualifiedName!paramTy ~ "`"
-                    ~ " for parameter `" ~ paramId ~ "`"
-                    ~ " on function `" ~ fullyQualifiedName!fn ~ "`"
-            );
-        }
-    }
+    enum MakeCallDispatcher = Impl!();
 }
 
 private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Middleware middlewares) {
@@ -463,8 +470,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
 
             // TODO: support various ways a handler can be called...
 
-            alias infos = GetParameterInfo!fn;
-            alias args = MakeCallDispatcher!(fn, infos);
+            enum args = MakeCallDispatcher!fn;
 
             DList!Middleware middlewares;
             foreach (mw_uda; getUDAs!(fn, Middleware)) {
