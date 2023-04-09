@@ -101,6 +101,17 @@ enum Delete = Method(HttpMethod.DELETE);
 /// ditto
 alias DELETE = Delete;
 
+/**
+ * UDA to restrict a route handler to run only when a header is present when applied to a function.
+ */
+struct RequireHeader {
+    string name;
+
+    private HeaderMatcher toMatcher() {
+        return new HeaderMatcher(name);
+    }
+}
+
 // ================================================================================
 
 /// Checks a condition if the request can be handled
@@ -131,17 +142,34 @@ private class MethodMatcher : Matcher {
 
     bool matches(Request req, ref RoutingStore store) {
         if (req.getMethod() != method.method) {
-            store.non_match_couse_method = true;
+            store.non_match_cause = NonMatchCause.Method;
             return false;
         }
         if (
             (method.method == HttpMethod.custom)
             && (req.getRawMethod() != method.raw_method)
         ) {
-            store.non_match_couse_method = true;
+            store.non_match_cause = NonMatchCause.Method;
             return false;
         }
         return true;
+    }
+}
+
+/// Checks if the request has a specific HTTP header set
+private class HeaderMatcher : Matcher {
+    private string name;
+
+    this(string name) {
+        this.name = name;
+    }
+
+    bool matches(Request req, ref RoutingStore store) {
+        if (req.headers.has(name)) {
+            return true;
+        }
+        store.non_match_cause = NonMatchCause.Header;
+        return false;
     }
 }
 
@@ -226,9 +254,15 @@ private struct RouteEntry {
     }
 }
 
+private enum NonMatchCause {
+    None,
+    Method,
+    Header,
+}
+
 /// Stores informations while routing
 private struct RoutingStore {
-    bool non_match_couse_method = false;
+    NonMatchCause non_match_cause = NonMatchCause.None;
 }
 
 /** 
@@ -275,8 +309,11 @@ class Router {
             }
         }
 
-        if (store.non_match_couse_method && !conf.treat_405_as_404) {
+        if (store.non_match_cause == NonMatchCause.Method && !conf.treat_405_as_404) {
             return new Response(HttpResponseCode.Method_Not_Allowed_405);
+        }
+        else if (store.non_match_cause == NonMatchCause.Header && !conf.treat_required_header_failure_as_404) {
+            return new Response(HttpResponseCode.Bad_Request_400);
         }
 
         return null;
@@ -487,10 +524,22 @@ Router initRouter(Modules...)(ServerConfig conf) {
             foreach (r_uda; getUDAs!(fn, Route)) {
                 static if (hasUDA!(fn, Method)) {
                     foreach (m_uda; getUDAs!(fn, Method)) {
-                        addRoute!(fn, args, AliasSeq!( r_uda, m_uda ))(r, middlewares);
+                        static if (hasUDA!(fn, RequireHeader)) {
+                            foreach (rh_uda; getUDAs!(fn, RequireHeader)) {
+                                addRoute!(fn, args, AliasSeq!( r_uda, m_uda, rh_uda ))(r, middlewares);
+                            }
+                        } else {
+                            addRoute!(fn, args, AliasSeq!( r_uda, m_uda ))(r, middlewares);
+                        }
                     }
                 } else {
-                    addRoute!(fn, args, AliasSeq!( r_uda ))(r, middlewares);
+                    static if (hasUDA!(fn, RequireHeader)) {
+                        foreach (rh_uda; getUDAs!(fn, RequireHeader)) {
+                            addRoute!(fn, args, AliasSeq!( r_uda, rh_uda ))(r, middlewares);
+                        }
+                    } else {
+                        addRoute!(fn, args, AliasSeq!( r_uda ))(r, middlewares);
+                    }
                 }
             }
 

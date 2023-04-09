@@ -82,6 +82,9 @@ class ServerConfig {
 	/// Retruns a 404 instead of a 405 when no route handler was found because the @Method restriction didn't permitted handling.
 	bool treat_405_as_404 = false;
 
+	/// Returns a 404 instead of a 400 when no route handler was found because the @RequiredHeader restriction didn't permitted handling.
+	bool treat_required_header_failure_as_404 = false;
+
 	this() {
 		this.addr = new InternetAddress("localhost", 8080);
 	}
