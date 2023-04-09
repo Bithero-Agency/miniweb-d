@@ -119,6 +119,14 @@ struct Header {
     string name;
 }
 
+/**
+ * UDA to take out the value of the query params when applied to a handler's parameter (only for `string` and `string[]`).
+ */
+struct QueryParam {
+    string name;
+    string defaultValue = null;
+}
+
 // ================================================================================
 
 /// Checks a condition if the request can be handled
@@ -446,6 +454,33 @@ private template MakeCallDispatcher(alias fn) {
                     );
                 }
             }
+            else static if (containsUDA!(QueryParam, paramUdas)) {
+                alias queryparam_udas = filterUDAs!(QueryParam, paramUdas);
+                static if (queryparam_udas.length != 1) {
+                    static assert(
+                        0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "` was annotated with multiple instances of `@QueryParam`"
+                    );
+                }
+
+                static if (queryparam_udas[0].defaultValue !is null) {
+                    enum DefVal = "\"" ~ queryparam_udas[0].defaultValue ~ "\"";
+                } else {
+                    enum DefVal = "null";
+                }
+
+                static if (is(plainParamTy == string)) {
+                    enum Impl = "req.uri.queryparams.getOne(\"" ~ queryparam_udas[0].name ~ "\"," ~ DefVal ~ ")," ~ tail;
+                }
+                else static if (is(plainParamTy == string[])) {
+                    enum Impl = "req.uri.queryparams.get(\"" ~ queryparam_udas[0].name ~ "\"," ~ DefVal ~ ")," ~ tail;
+                }
+                else {
+                    static assert(
+                        0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "` was annotated with `@QueryParam`,"
+                            ~ " but is not of type `string` or `string[]`: " ~ fullyQualifiedName!paramTy
+                    );
+                }
+            }
             else static if (hasStaticMember!(plainParamTy, "fromRequest")) {
                 alias fromRequest = __traits(getMember, plainParamTy, "fromRequest");
                 static assert (
@@ -553,6 +588,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
             static assert(isFunction!fn, "`" ~ __traits(identifier, fn) ~ "` is annotated with @Route but isn't a function");
 
             static assert(!hasUDA!(fn, Header), "`@Header` cannot be applied to a function directly: " ~ fullyQualifiedName!fn);
+            static assert(!hasUDA!(fn, QueryParam), "`@QueryParam` cannot be applied to a function directly: " ~ fullyQualifiedName!fn);
 
             // TODO: support various ways a handler can be called...
 
