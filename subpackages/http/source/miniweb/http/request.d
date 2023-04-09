@@ -39,10 +39,10 @@ class Request {
 	private HttpClient client;
 
 	/// The raw HTTP method; only valid if $(REF method) is $(REF miniweb.http.method.HttpMethod.custom)
-	private string raw_method;
+	private string _raw_method;
 
 	/// The HTTP method; if this is $(REF miniweb.http.method.HttpMethod.custom), the real method is in $(REF raw_method)
-	private HttpMethod method;
+	private HttpMethod _method;
 
 	/// The request uri
 	private URI _uri;
@@ -78,12 +78,21 @@ class Request {
 
 	/// Gets the raw method of the request
 	string getRawMethod() {
-		return raw_method;
+		return _raw_method;
+	}
+
+	@property string rawMethod() {
+		return _raw_method;
 	}
 
 	/// Gets the method of the request; if this returns $(REF miniweb.http.method.HttpMethod.custom) use $(REF getRawMethod) instead
 	HttpMethod getMethod() {
-		return method;
+		return _method;
+	}
+
+	/// Gets the method of the request; if this returns $(REF miniweb.http.method.HttpMethod.custom) use $(REF getRawMethod) instead
+	@property HttpMethod method() {
+		return _method;
 	}
 
 	/// Gets the headers
@@ -145,8 +154,8 @@ Request parseRequest(HttpClient client) {
 		writeln("[miniweb.http.parseRequest] requestLine: ", requestLine);
 	}
 
-	r.method = httpMethodFromString(requestLine[0]);
-	r.raw_method = requestLine[0];
+	r._method = httpMethodFromString(requestLine[0]);
+	r._raw_method = requestLine[0];
 
 	r._uri = new URI(requestLine[1]);
 
