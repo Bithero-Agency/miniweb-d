@@ -119,6 +119,12 @@ struct Header {
     string name;
 }
 
+/// Requires the `Cookies` HTTP header to be present.
+enum RequireCookies = RequireHeader("Cookies");
+
+/// Gets the `Cookies` header
+enum Cookies = Header("Cookies");
+
 // ================================================================================
 
 /// Checks a condition if the request can be handled
