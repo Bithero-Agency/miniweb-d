@@ -519,8 +519,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
                     assert(0, "Cannot register `" ~ fullyQualifiedName!fn ~ "` as middleware `" ~ uda.name ~ "` since a same named middleware already exists");
                 }
 
-                alias infos = GetParameterInfo!fn;
-                alias args = MakeCallDispatcher!(fn, infos);
+                enum args = MakeCallDispatcher!fn;
                 static if (is(ReturnType!fn == void)) {
                     pragma(msg, "Creating middleware handler on `" ~ fullyQualifiedName!fn ~ "` named '" ~ uda.name ~ "', calling with: `" ~ args ~ "`");
                     r.addMiddleware(uda.name, (Request req) {
