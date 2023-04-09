@@ -44,9 +44,10 @@ Currently supported are:
 - `URI` get the uri of the request
 - `QueryParamBag` get the query params of the request
 - `HttpMethod` get the requests HTTP method of the request
-- `@Header` annotated `string` or `string[]` params get the specified header
+- `@Header` annotated `string` or `string[]` params get the specified header;
+    Uses the parameter name if none is supplied
 - `@QueryParam` annotated `string` or `string[]` params get the specified header;
-  Uses the parameter name as queryparam name if none is supplied, same with default value
+    Uses the parameter name as queryparam name if none is supplied, same with default value
 
 To use middlewares you have two options, either create a named one or use functionals:
 ```d
