@@ -40,17 +40,106 @@ import std.container : DList;
  */
 struct Route {
     string route;
+
+    private RouteMatcher toMatcher() {
+        return new RouteMatcher(route);
+    }
 }
 
 /// ditto
 alias route = Route;
 
-/// Matcher to check if a request can be handled
-private struct Matcher {
-    private string str;
+/** 
+ * UDA to restrict a route handler to a specific http method.
+ * Apply multiple different to combine them OR-wise.
+ */
+struct Method {
+    HttpMethod method;
+    string raw_method = null;
+
+    this(HttpMethod method) {
+        this.method = method;
+    }
+
+    this(string method) {
+        this.method = HttpMethod.custom;
+        this.raw_method = method;
+    }
+
+    private MethodMatcher toMatcher() {
+        return new MethodMatcher(this);
+    }
+}
+
+/// Restrict routehandler to HEAD requests; see $(REF Method)
+enum Head = Method(HttpMethod.HEAD);
+
+/// ditto
+alias HEAD = Head;
+
+/// Restrict routehandler to GET requests; see $(REF Method)
+enum Get = Method(HttpMethod.GET);
+
+/// ditto
+alias GET = Get;
+
+/// Restrict routehandler to POST requests; see $(REF Method)
+enum Post = Method(HttpMethod.POST);
+
+/// ditto
+alias POST = Post;
+
+/// Restrict routehandler to PATCH requests; see $(REF Method)
+enum Patch = Method(HttpMethod.PATCH);
+
+/// ditto
+alias PATCH = Patch;
+
+/// Restrict routehandler to DELETE requests; see $(REF Method)
+enum Delete = Method(HttpMethod.DELETE);
+
+/// ditto
+alias DELETE = Delete;
+
+// ================================================================================
+
+/// Checks a condition if the request can be handled
+interface Matcher {
+    bool matches(Request req);
+}
+
+/// Checks if the request matches a specific route
+private class RouteMatcher : Matcher {
+    private string route;
+
+    this(string route) {
+        this.route = route;
+    }
 
     bool matches(Request req) {
-        return req.getURI().path == str;
+        return req.getURI().path == route;
+    }
+}
+
+/// Checks if the request has a specific HTTP method
+private class MethodMatcher : Matcher {
+    private Method method;
+
+    this(Method method) {
+        this.method = method;
+    }
+
+    bool matches(Request req) {
+        if (req.getMethod() != method.method) {
+            return false;
+        }
+        if (
+            (method.method == HttpMethod.custom)
+            && (req.getRawMethod() != method.raw_method)
+        ) {
+            return false;
+        }
+        return true;
     }
 }
 
@@ -121,21 +210,30 @@ private:
 
 /// Entry in the routing table
 private struct RouteEntry {
-    Matcher m;
+    Matcher[] matchers;
     Handler handler;
     DList!Middleware middlewares;
+
+    bool matches(Request req) {
+        foreach (m; matchers) {
+            if (!m.matches(req)) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 /** 
  * The request router; used to route request, find handlers and calling them
  */
 class Router {
-    private DList!RouteEntry routes;
+    private RouteEntry[] routes;
     private Callable!MaybeResponse[string] middlewares;
 
     Response route(Request req) {
         foreach (ent; routes) {
-            if (ent.m.matches(req)) {
+            if (ent.matches(req)) {
                 foreach (mw_spec; ent.middlewares) {
                     import std.stdio;
                     writeln("try middleware... ", mw_spec);
@@ -169,20 +267,36 @@ class Router {
         return null;
     }
 
-    void addRoute(T)(Route r, DList!Middleware mws, T delegate(Request) dg) {
+    void addRoute(T)(Matcher[] matchers, DList!Middleware mws, T delegate(Request) dg) {
         Callable!T cb;
         cb.set(dg);
-        routes.insertBack(
-            RouteEntry(
-                Matcher(r.route), Handler.from(cb), mws
-            )
-        );
+        routes ~= RouteEntry(matchers, Handler.from(cb), mws);
     }
 
     void addMiddleware(string name, MaybeResponse delegate(Request) dg) {
         Callable!MaybeResponse cb;
         cb.set(dg);
         middlewares[name] = cb;
+    }
+
+    /// Sorts all routes so we route correctly
+    void sortRoutes() {
+        import std.algorithm, std.array, std.stdio;
+
+        // Currently simply sort by count of matchers:
+        // The more matchers are present, the lower the routeentry will be positioned
+        // so more specific routeentries will be checked first.
+        alias compareRoute = (x, y) {
+            return x.matchers.length > y.matchers.length;
+        };
+        routes.sort!compareRoute;
+
+        debug (minweb_router_sort) {
+            writeln("[miniweb.routing.Router.sortRoutes] Sorted routes:");
+            foreach (r; routes) {
+                writeln("[miniweb.routing.Router.sortRoutes]  - ", r);
+            }
+        }
     }
 }
 
@@ -248,6 +362,36 @@ private template MakeCallDispatcher(alias fn, paramInfos...) {
             );
         }
     }
+}
+
+private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Middleware middlewares) {
+    import std.traits : fullyQualifiedName, getUDAs, hasUDA, ReturnType;
+
+    pragma(msg, "Creating route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
+    pragma(msg, "  Matchers: ");
+    static foreach (uda; matcher_udas) {
+        pragma(msg, "   - ", uda);
+    }
+    static if (hasUDA!(fn, Middleware)) {
+        static foreach (mw_uda; getUDAs!(fn, Middleware)) {
+            pragma(msg, "   - ", mw_uda);
+        }
+    }
+
+    Matcher[] matchers;
+    static foreach (uda; matcher_udas) {
+        matchers ~= uda.toMatcher();
+    }
+
+    r.addRoute(matchers, middlewares, (Request req) {
+        static if (is(ReturnType!fn == void)) {
+            mixin( "fn(" ~ args ~ ");" );
+        } else static if (is(ReturnType!fn == Response)) {
+            mixin( "return fn(" ~ args ~ ");" );
+        } else {
+            static assert(0, "`" ~ fullyQualifiedName!fn ~ "` needs either void or Response as return type");
+        }
+    });
 }
 
 /**
@@ -317,25 +461,19 @@ Router initRouter(Modules...)(ServerConfig conf) {
             }
 
             foreach (r_uda; getUDAs!(fn, Route)) {
-                r.addRoute(r_uda, middlewares, (Request req) {
-                    pragma(msg, "Creating route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
-                    pragma(msg, "  Routing spec is: ", r_uda);
-                    pragma(msg, "  Middlewares applied: ");
-                    static foreach (mw_uda; getUDAs!(fn, Middleware)) {
-                        pragma(msg, "   - ", mw_uda);
+                static if (hasUDA!(fn, Method)) {
+                    foreach (m_uda; getUDAs!(fn, Method)) {
+                        addRoute!(fn, args, AliasSeq!( m_uda, r_uda ))(r, middlewares);
                     }
-                    static if (is(ReturnType!fn == void)) {
-                        mixin( "fn(" ~ args ~ ");" );
-                    } else static if (is(ReturnType!fn == Response)) {
-                        mixin( "return fn(" ~ args ~ ");" );
-                    } else {
-                        static assert(0, "`" ~ fullyQualifiedName!fn ~ "` needs either void or Response as return type");
-                    }
-                });
+                } else {
+                    addRoute!(fn, args, AliasSeq!( r_uda ))(r, middlewares);
+                }
             }
 
         }
     }
+
+    r.sortRoutes();
 
     return r;
 }
