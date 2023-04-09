@@ -495,6 +495,9 @@ private template MakeCallDispatcher(alias fn) {
                 } else {
                     static if (qp_uda.defaultValue !is null) {
                         enum DefVal = "\"" ~ qp_uda.defaultValue ~ "\"";
+                        static if (!is(paramDef == void)) {
+                            pragma(msg, "WARNING: found both default value in `@QueryParam` annotation and on parameter; prioritize defaultvalue of the annotation");
+                        }
                     } else {
                         static if (is(paramDef == void)) {
                             enum DefVal = "null";
