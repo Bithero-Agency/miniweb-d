@@ -116,7 +116,7 @@ struct RequireHeader {
  * UDA to take out the value of the header when applied to a handler's parameter (only for `string` and `string[]`).
  */
 struct Header {
-    string name;
+    string name = null;
 }
 
 /**
@@ -443,11 +443,23 @@ private template MakeCallDispatcher(alias fn) {
                         0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "` was annotated with multiple instances of `@Header`"
                     );
                 }
-                else static if (is(plainParamTy == string)) {
-                    enum Impl = "req.headers.getOne(\"" ~ header_udas[0].name ~ "\")," ~ tail;
+
+                alias h_uda = header_udas[0];
+                static if (is(h_uda == Header)) {
+                    enum Name = paramId;
+                } else {
+                    static if (h_uda.name !is null) {
+                       enum Name = h_uda.name;
+                    } else {
+                       enum Name = paramId;
+                    }
+                }
+
+                static if (is(plainParamTy == string)) {
+                    enum Impl = "req.headers.getOne(\"" ~ Name ~ "\")," ~ tail;
                 }
                 else static if (is(plainParamTy == string[])) {
-                    enum Impl = "req.headers.get(\"" ~ header_udas[0].name ~ "\")," ~ tail;
+                    enum Impl = "req.headers.get(\"" ~ Name ~ "\")," ~ tail;
                 }
                 else {
                     static assert(
