@@ -415,6 +415,7 @@ private template MakeCallDispatcher(alias fn) {
             }
 
             import miniweb.utils : filterUDAs, containsUDA;
+            import std.meta : AliasSeq;
 
             static if (is(plainParamTy == Request)) {
                 enum Impl = "req," ~ tail;
@@ -450,6 +451,21 @@ private template MakeCallDispatcher(alias fn) {
                             ~ " but is not of type `string` or `string[]`: " ~ fullyQualifiedName!paramTy
                     );
                 }
+            }
+            else static if (hasStaticMember!(plainParamTy, "fromRequest")) {
+                alias fromRequest = __traits(getMember, plainParamTy, "fromRequest");
+                static assert (
+                    is(ReturnType!fromRequest == plainParamTy),
+                    "Cannot compile dispatcher: type `" ~ fullyQualifiedName!paramTy ~ "`"
+                        ~ " that has a static function `fromRequest` needs to have itself as returntype but had"
+                        ~ " `" ~ fullyQualifiedName!(ReturnType!fromRequest) ~ "`"
+                );
+                static assert (
+                    is(Parameters!fromRequest == AliasSeq!( Request )),
+                    "Cannot compile dispatcher: type `" ~ fullyQualifiedName!paramTy ~ "`"
+                        ~ " that has a static function `fromRequest` needs to have one parameter of type `Request`"
+                );
+                enum Impl = "imported!\"" ~ moduleName!plainParamTy ~ "\"." ~ plainParamTy.stringof ~ ".fromRequest(req)," ~ tail;
             }
             else {
                 static assert(
