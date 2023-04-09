@@ -105,3 +105,55 @@ unittest {
     static assert(info[10] == "f");
     static assert(info[11] == 23);
 }
+
+private template isDesiredUDA(alias attribute) {
+    template isDesiredUDA(alias toCheck) {
+        static if (is(typeof(attribute)) && !__traits(isTemplate, attribute)) {
+            static if (__traits(compiles, toCheck == attribute)) {
+                enum isDesiredUDA = toCheck == attribute;
+            }
+            else {
+                enum isDesiredUDA = false;
+            }
+        }
+        else static if (is(typeof(toCheck))) {
+            static if (__traits(isTemplate, attribute)) {
+                enum isDesiredUDA =  isInstanceOf!(attribute, typeof(toCheck));
+            }
+            else {
+                enum isDesiredUDA = is(typeof(toCheck) == attribute);
+            }
+        }
+        else static if (__traits(isTemplate, attribute)) {
+            enum isDesiredUDA = isInstanceOf!(attribute, toCheck);
+        }
+        else {
+            enum isDesiredUDA = is(toCheck == attribute);
+        }
+    }
+}
+
+/**
+ * Filters the supplied list of attributes for one certain attribute.
+ * 
+ * Params:
+ *   attribute = the attribute to filter for
+ *   attribute_list = the list of attributes to filter
+ * 
+ * See_Also: $(REF std.traits.getUDAs) when wanting to filter directly from a symbol
+ */
+template filterUDAs(alias attribute, attribute_list...) {
+    import std.meta : Filter;
+    alias filterUDAs = Filter!(isDesiredUDA!attribute, attribute_list);
+}
+
+/**
+ * Checks if the supplied list of attributes contains one specific attribute.
+ * 
+ * Params:
+ *   attribute = the attribute to search for
+ *   attribute_list = the list of attributes to search
+ * 
+ * See_Also: $(REF std.traits.hasUDAs) when wanting to check a symbol directly
+ */
+enum containsUDA(alias attribute, attribute_list...) = filterUDAs!(attribute, attribute_list).length != 0;
