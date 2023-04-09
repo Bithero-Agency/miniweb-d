@@ -112,6 +112,13 @@ struct RequireHeader {
     }
 }
 
+/**
+ * UDA to take out the value of the header when applied to a handler's parameter (only for `string` and `string[]`).
+ */
+struct Header {
+    string name;
+}
+
 // ================================================================================
 
 /// Checks a condition if the request can be handled
@@ -379,6 +386,8 @@ private template MakeCallDispatcher(alias fn) {
 
             alias plainParamTy = Unconst!paramTy;
 
+            alias paramUdas = __traits(getAttributes, paramTy);
+
             import std.conv : to;
             debug(miniweb_mkCallDisp) {
                 pragma(
@@ -387,6 +396,7 @@ private template MakeCallDispatcher(alias fn) {
                         ~ " | ty:" ~ fullyQualifiedName!paramTy
                         ~ " | id:" ~ paramId
                         ~ " | sc:" ~ to!string(paramSc)
+                        ~ " | udas: ", paramUdas
                 );
             }
 
@@ -397,6 +407,8 @@ private template MakeCallDispatcher(alias fn) {
                         ~ " on function `" ~ fullyQualifiedName!fn ~ "`"
                 );
             }
+
+            import miniweb.utils : filterUDAs, containsUDA;
 
             static if (is(plainParamTy == Request)) {
                 enum Impl = "req," ~ tail;
@@ -412,6 +424,26 @@ private template MakeCallDispatcher(alias fn) {
             }
             else static if (is(plainParamTy == HttpMethod)) {
                 enum Impl = "req.method," ~ tail;
+            }
+            else static if (containsUDA!(Header, paramUdas)) {
+                alias header_udas = filterUDAs!(Header, paramUdas);
+                static if (header_udas.length != 1) {
+                    static assert(
+                        0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "` was annotated with multiple instances of `@Header`"
+                    );
+                }
+                else static if (is(plainParamTy == string)) {
+                    enum Impl = "req.headers.getOne(\"" ~ header_udas[0].name ~ "\")," ~ tail;
+                }
+                else static if (is(plainParamTy == string[])) {
+                    enum Impl = "req.headers.get(\"" ~ header_udas[0].name ~ "\")," ~ tail;
+                }
+                else {
+                    static assert(
+                        0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "` was annotated with `@Header`,"
+                            ~ " but is not of type `string` or `string[]`: " ~ fullyQualifiedName!paramTy
+                    );
+                }
             }
             else {
                 static assert(
@@ -504,6 +536,8 @@ Router initRouter(Modules...)(ServerConfig conf) {
 
         foreach (fn; getSymbolsByUDA!(mod, Route)) {
             static assert(isFunction!fn, "`" ~ __traits(identifier, fn) ~ "` is annotated with @Route but isn't a function");
+
+            static assert(!hasUDA!(fn, Header), "`@Header` cannot be applied to a function directly: " ~ fullyQualifiedName!fn);
 
             // TODO: support various ways a handler can be called...
 
