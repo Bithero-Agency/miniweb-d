@@ -43,6 +43,7 @@ Currently supported are:
 - `HeaderBag` get the headers of the request
 - `URI` get the uri of the request
 - `QueryParamBag` get the query params of the request
+- `HttpMethod` get the requests HTTP method of the request
 
 To use middlewares you have two options, either create a named one or use functionals:
 ```d
