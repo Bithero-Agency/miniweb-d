@@ -39,3 +39,13 @@ Response doThing(Request r, HeaderBag h, URI uri) {
     resp.setBody("Hello world :D");
     return resp;
 }
+
+@Route("/doSome")
+void doSome1(HttpMethod method) {
+    writeln("called doSome1: ", method);
+}
+
+@GET @Route("/doSome")
+void doSome2() {
+    writeln("called doSome2");
+}
