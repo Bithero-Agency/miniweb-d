@@ -354,6 +354,9 @@ private template MakeCallDispatcher(alias fn, paramInfos...) {
         else static if (is(plainParamTy == QueryParamBag)) {
             enum MakeCallDispatcher = "req.uri.queryparams," ~ tail;
         }
+        else static if (is(plainParamTy == HttpMethod)) {
+            enum MakeCallDispatcher = "req.method," ~ tail;
+        }
         else {
             static assert(
                 0, "Cannot compile dispatcher: unknown type `" ~ fullyQualifiedName!paramTy ~ "`"
