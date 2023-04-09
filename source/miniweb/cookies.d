@@ -80,11 +80,17 @@ class CookieBag {
      * 
      * Params:
      *   name = the name of the cookie
+     *   defaultValue = the defaultvalue to return if the cookie wasn't set
      * 
      * Returns: the cookies value
      */
-    string get(string name) {
-        return data[name];
+    string get(string name, string defaultValue = null) {
+        auto p = name in data;
+        if (p !is null) {
+            return *p;
+        } else {
+            return defaultValue;
+        }
     }
 
     /// Creates a CookieBag instance from a request
