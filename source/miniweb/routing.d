@@ -481,8 +481,8 @@ private template MakeCallDispatcher(alias fn) {
                     }
                     enum Name = paramId;
                 } else {
-                    static if (queryparam_udas[0].defaultValue !is null) {
-                        enum DefVal = "\"" ~ queryparam_udas[0].defaultValue ~ "\"";
+                    static if (qp_uda.defaultValue !is null) {
+                        enum DefVal = "\"" ~ qp_uda.defaultValue ~ "\"";
                     } else {
                         static if (is(paramDef == void)) {
                             enum DefVal = "null";
@@ -498,8 +498,8 @@ private template MakeCallDispatcher(alias fn) {
                         }
                     }
 
-                    static if (queryparam_udas[0].name !is null) {
-                       enum Name = queryparam_udas[0].name;
+                    static if (qp_uda.name !is null) {
+                       enum Name = qp_uda.name;
                     } else {
                        enum Name = paramId;
                     }
