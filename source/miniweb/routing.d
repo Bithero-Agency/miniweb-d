@@ -673,7 +673,8 @@ private template MakeCallDispatcher(alias fn) {
 }
 
 private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Middleware middlewares) {
-    import std.traits : fullyQualifiedName, getUDAs, hasUDA, ReturnType;
+    import std.traits : fullyQualifiedName, getUDAs, hasUDA, ReturnType, hasMember, isFunction, Parameters;
+    import std.meta : AliasSeq;
 
     pragma(msg, "Creating route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
     pragma(msg, "  Matchers: ");
@@ -692,12 +693,32 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
     }
 
     r.addRoute(matchers, middlewares, (MiniwebRequest req) {
-        static if (is(ReturnType!fn == void)) {
+        alias retTy = ReturnType!fn;
+        static if (is(retTy == void)) {
             mixin( "fn(" ~ args ~ ");" );
-        } else static if (is(ReturnType!fn == Response)) {
+        } else static if (is(retTy == Response)) {
             mixin( "return fn(" ~ args ~ ");" );
+        } else static if (hasMember!(retTy, "toResponse")) {
+            alias toResponseMember = __traits(getMember, retTy, "toResponse");
+            static assert (
+                isFunction!toResponseMember,
+                "Member toResponse of `" ~ fullyQualifiedName!retTy ~ "` needs to be a method"
+            );
+            static assert (
+                is(ReturnType!toResponseMember == Response),
+                "Member toResponse of `" ~ fullyQualifiedName!retTy ~ "` needs to have Response as a return type"
+            );
+
+            alias toResponseParams = Parameters!toResponseMember;
+            static if (is(toResponseParams == AliasSeq!())) {
+                mixin( "return fn(" ~ args ~ ").toResponse();" );
+            } else static if (is(toResponseParams == AliasSeq!(Request))) {
+                mixin( "return fn(" ~ args ~ ").toResponse(req.http);" );
+            } else static if (is(toResponseParams == AliasSeq!(MiniwebRequest))) {
+                mixin( "return fn(" ~ args ~ ").toResponse(req);" );
+            }
         } else {
-            static assert(0, "`" ~ fullyQualifiedName!fn ~ "` needs either void or Response as return type");
+            static assert(0, "`" ~ fullyQualifiedName!fn ~ "` needs either void, Response or a type that has a toResponse method as return type");
         }
     });
 }
