@@ -39,7 +39,8 @@ Response returnSomething(HeaderBag headers) {
 Miniweb has the ability to analyse annotated functions and call them with any order of parameters, as long as minweb supports the type.
 
 Currently supported are:
-- `Request` get the raw request
+- `Request` get the raw http request
+- `MiniwebRequest` get the miniweb request
 - `HeaderBag` get the headers of the request
 - `URI` get the uri of the request
 - `QueryParamBag` get the query params of the request
