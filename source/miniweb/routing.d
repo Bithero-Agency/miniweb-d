@@ -35,6 +35,7 @@ import async.utils : Option;
 alias MaybeResponse = Option!Response;
 
 import std.container : DList;
+import std.regex : Regex, regex;
 
 /**
  * UDA to annotate route handlers.
@@ -128,6 +129,13 @@ struct QueryParam {
     string defaultValue = null;
 }
 
+/**
+ * UDA to take out the value of the path params when applied to a handler's parameter (only for `string`).
+ */
+struct PathParam {
+    string name = null;
+}
+
 // ================================================================================
 
 /// Checks a condition if the request can be handled
@@ -137,14 +145,75 @@ interface Matcher {
 
 /// Checks if the request matches a specific route
 private class RouteMatcher : Matcher {
-    private string route;
+    private Regex!char re;
+    private string[] param_names;
 
     this(string route) {
-        this.route = route;
+        // this.route = route;
+        this.makeRegex(route);
+    }
+
+    private void makeRegex(string route) {
+        string res = "";
+        string param_name = "";
+        bool is_param = false;
+
+        this.param_names = [];
+
+        foreach (char c; route) {
+            if (!is_param) {
+                if (c == ':') {
+                    is_param = true;
+                    continue;
+                }
+            }
+            else {
+                if (
+                    (c >= 'a' && c <= 'z') ||
+                    (c >= 'A' && c <= 'Z') ||
+                    (c == '_') ||
+                    (c >= '0' && c <= '9')
+                ) {
+                    param_name ~= c;
+                    continue;
+                }
+                else {
+                    res ~= "(?P<" ~ param_name ~ ">[^\\/]*)";
+                    this.param_names ~= param_name;
+                    param_name = "";
+                    is_param = false;
+                }
+            }
+
+            if (c == '?') {
+                res ~= c;
+            } else {
+                import std.conv : to;
+                import std.regex : escaper;
+                res ~= to!string( escaper([c]) );
+            }
+        }
+
+        if (is_param) {
+            res ~= "(?P<" ~ param_name ~ ">.*)";
+            this.param_names ~= param_name;
+        }
+
+        res = "^" ~ res ~ "$";
+
+        this.re = regex(res);
     }
 
     bool matches(MiniwebRequest req, ref RoutingStore store) {
-        return req.http.getURI().path == route;
+        import std.regex : matchFirst, Captures;
+        auto res = matchFirst(req.http.uri.path, this.re);
+        if (res) {
+            foreach (string key; this.param_names) {
+                req.pathParams[key] = res[key];
+            }
+            return true;
+        }
+        return false;
     }
 }
 
@@ -536,6 +605,36 @@ private template MakeCallDispatcher(alias fn) {
                     static assert(
                         0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "` was annotated with `@QueryParam`,"
                             ~ " but is not of type `string` or `string[]`: " ~ fullyQualifiedName!paramTy
+                    );
+                }
+            }
+            else static if (containsUDA!(PathParam, paramUdas)) {
+                alias pathparam_udas = filterUDAs!(PathParam, paramUdas);
+                static if (pathparam_udas.length != 1) {
+                    static assert(
+                        0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "` was annotated with multiple instances of `@PathParam`"
+                    );
+                }
+
+                alias pp_uda = pathparam_udas[0];
+
+                static if (is(pp_uda == PathParam)) {
+                    enum Name = paramId;
+                } else {
+                    static if (pp_uda.name !is null) {
+                       enum Name = pp_uda.name;
+                    } else {
+                       enum Name = paramId;
+                    }
+                }
+
+                static if (is(plainParamTy == string)) {
+                    enum Impl = "req.getPathParam(\"" ~ Name ~ "\")," ~ tail;
+                }
+                else {
+                    static assert(
+                        0, "Cannot compile dispatcher: parameter `" ~ paramId ~ "` was annotated with `@PathParam`,"
+                            ~ " but is not of type `string`: " ~ fullyQualifiedName!paramTy
                     );
                 }
             }

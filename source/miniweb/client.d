@@ -62,11 +62,22 @@ class MiniWebHttpClient : BaseHttpClient {
 class MiniwebRequest {
 	private Request _http_request;
 
+	/// Storage for path parameters
+	public string[string] pathParams;
+
 	this(Request http_request) {
 		this._http_request = http_request;
 	}
 
 	@property Request http() {
 		return this._http_request;
+	}
+
+	string getPathParam(string key) {
+		auto p = key in this.pathParams;
+		if (p !is null) {
+			return *p;
+		}
+		throw new Exception("Tried to access un-available path parameter '" ~ key ~ "'");
 	}
 }
