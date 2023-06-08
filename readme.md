@@ -48,6 +48,8 @@ Currently supported are:
     Uses the parameter name if none is supplied
 - `@QueryParam` annotated `string` or `string[]` params get the specified header;
     Uses the parameter name as queryparam name if none is supplied, same with default value
+- `@PathParam` annotated `string` params get the specified path parameter;
+    Uses the parameter name if none is supplied
 
 To use middlewares you have two options, either create a named one or use functionals:
 ```d
@@ -75,6 +77,13 @@ Response returnSomething(HeaderBag headers) {
     return MaybeReponse.none();
 })
 Response someWhereOther() {
+    // ...
+}
+
+// To use path parameters, just use the syntax :<a-zA-Z0-9_> inside the route matcher.
+// @Route declarations also now support the `?` specified which make the character before it optional.
+@GET @Route("/user/:username/?")
+Response getUser(@PathParam string username) {
     // ...
 }
 ```
