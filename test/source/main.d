@@ -54,3 +54,26 @@ void doSome2() {
 void getUserByName(@PathParam string username) {
     writeln("called getUserByName: username = ", username);
 }
+
+class CustomValue {
+    private int num;
+
+    this(int num) {
+        this.num = num;
+    }
+
+    Response toResponse(Request req) {
+        import std.conv : to;
+        auto resp = Response.build_200_OK();
+        resp.setBody(
+            "host is: " ~ req.headers.getOne("host") ~ "\n"
+            ~ "num is: " ~ to!string(this.num) ~ "\n"
+        );
+        return resp;
+    }
+}
+@GET @Route("/customValue/:val")
+CustomValue getCustomValue(@PathParam string val) {
+    import std.conv : to;
+    return new CustomValue( to!int(val) );
+}
