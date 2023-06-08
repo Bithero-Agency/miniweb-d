@@ -91,6 +91,12 @@ enum Post = Method(HttpMethod.POST);
 /// ditto
 alias POST = Post;
 
+/// Restrict routehandler to PUT requests; see $(REF Method)
+enum Put = Method(HttpMethod.PUT);
+
+/// ditto
+alias PUT = Put;
+
 /// Restrict routehandler to PATCH requests; see $(REF Method)
 enum Patch = Method(HttpMethod.PATCH);
 
