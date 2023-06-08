@@ -28,6 +28,7 @@ module miniweb.client;
 import async.io.socket;
 import std.variant;
 import miniweb.http.client;
+import miniweb.http.request;
 
 /** 
  * Miniweb's HTTP Client
@@ -56,4 +57,16 @@ class MiniWebHttpClient : BaseHttpClient {
 		this.sock.send(buffer).await();
 	}
 
+}
+
+class MiniwebRequest {
+	private Request _http_request;
+
+	this(Request http_request) {
+		this._http_request = http_request;
+	}
+
+	@property Request http() {
+		return this._http_request;
+	}
 }

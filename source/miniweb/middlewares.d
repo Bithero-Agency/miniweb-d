@@ -25,7 +25,7 @@
 
 module miniweb.middlewares;
 
-import miniweb.http.request;
+import miniweb.client : MiniwebRequest;
 import miniweb.http.response;
 import miniweb.routing : MaybeResponse;
 
@@ -40,11 +40,11 @@ struct RegisterMiddleware {
  * UDA to apply to a route handler to specify which middleware to apply
  */
 struct Middleware {
-    this(MaybeResponse delegate(Request) dg) {
+    this(MaybeResponse delegate(MiniwebRequest) dg) {
         this._kind = Kind.DG;
         this.dg = dg;
     }
-    this(MaybeResponse function(Request) fn) {
+    this(MaybeResponse function(MiniwebRequest) fn) {
         this._kind = Kind.FN;
         this.fn = fn;
     }
@@ -93,7 +93,7 @@ struct Middleware {
      * 
      * Throws: Exception if trying to all a named middleware
      */
-    MaybeResponse opCall(Request req) {
+    MaybeResponse opCall(MiniwebRequest req) {
         final switch (_kind) {
             case Kind.NO:
             case Kind.NAMED:
@@ -109,7 +109,7 @@ private:
     Kind _kind = Kind.NO;
     union {
         string _name;
-        MaybeResponse delegate(Request) dg;
-        MaybeResponse function(Request) fn;
+        MaybeResponse delegate(MiniwebRequest) dg;
+        MaybeResponse function(MiniwebRequest) fn;
     }
 }

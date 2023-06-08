@@ -29,6 +29,7 @@ import miniweb.http;
 import miniweb.config;
 import miniweb.utils;
 import miniweb.middlewares;
+import miniweb.client : MiniwebRequest;
 import async.utils : Option;
 
 alias MaybeResponse = Option!Response;
@@ -131,7 +132,7 @@ struct QueryParam {
 
 /// Checks a condition if the request can be handled
 interface Matcher {
-    bool matches(Request req, ref RoutingStore store);
+    bool matches(MiniwebRequest req, ref RoutingStore store);
 }
 
 /// Checks if the request matches a specific route
@@ -142,8 +143,8 @@ private class RouteMatcher : Matcher {
         this.route = route;
     }
 
-    bool matches(Request req, ref RoutingStore store) {
-        return req.getURI().path == route;
+    bool matches(MiniwebRequest req, ref RoutingStore store) {
+        return req.http.getURI().path == route;
     }
 }
 
@@ -155,14 +156,14 @@ private class MethodMatcher : Matcher {
         this.method = method;
     }
 
-    bool matches(Request req, ref RoutingStore store) {
-        if (req.getMethod() != method.method) {
+    bool matches(MiniwebRequest req, ref RoutingStore store) {
+        if (req.http.getMethod() != method.method) {
             store.non_match_cause = NonMatchCause.Method;
             return false;
         }
         if (
             (method.method == HttpMethod.custom)
-            && (req.getRawMethod() != method.raw_method)
+            && (req.http.getRawMethod() != method.raw_method)
         ) {
             store.non_match_cause = NonMatchCause.Method;
             return false;
@@ -179,8 +180,8 @@ private class HeaderMatcher : Matcher {
         this.name = name;
     }
 
-    bool matches(Request req, ref RoutingStore store) {
-        if (req.headers.has(name)) {
+    bool matches(MiniwebRequest req, ref RoutingStore store) {
+        if (req.http.headers.has(name)) {
             return true;
         }
         store.non_match_cause = NonMatchCause.Header;
@@ -190,16 +191,16 @@ private class HeaderMatcher : Matcher {
 
 /// Container to store delegates / functions which are route handlers with the returntype `T`.
 private struct Callable(T) {
-    void set(T function(Request req) fn) pure nothrow @nogc @safe {
+    void set(T function(MiniwebRequest req) fn) pure nothrow @nogc @safe {
         () @trusted { this.fn = fn; }();
         this.kind = Kind.FN;
     }
-    void set(T delegate(Request req) dg) pure nothrow @nogc @safe {
+    void set(T delegate(MiniwebRequest req) dg) pure nothrow @nogc @safe {
         () @trusted { this.dg = dg; }();
         this.kind = Kind.DG;
     }
 
-    T opCall(Request req) {
+    T opCall(MiniwebRequest req) {
         final switch (this.kind) {
             case Kind.FN: return fn(req);
             case Kind.DG: return dg(req);
@@ -210,14 +211,14 @@ private:
 	enum Kind { NO, FN, DG }
 	Kind kind = Kind.NO;
 	union {
-		T function(Request req) fn;
-		T delegate(Request req) dg;
+		T function(MiniwebRequest req) fn;
+		T delegate(MiniwebRequest req) dg;
 	}
 }
 
 /// Container for route handlers
 private struct Handler {
-    Response opCall(Request req) {
+    Response opCall(MiniwebRequest req) {
         final switch (kind) {
             case Kind.NONE:
                 throw new Exception("Tried to call unintialized handler!");
@@ -259,7 +260,7 @@ private struct RouteEntry {
     Handler handler;
     DList!Middleware middlewares;
 
-    bool matches(Request req, ref RoutingStore store) {
+    bool matches(MiniwebRequest req, ref RoutingStore store) {
         foreach (m; matchers) {
             if (!m.matches(req, store)) {
                 return false;
@@ -287,7 +288,9 @@ class Router {
     private RouteEntry[] routes;
     private Callable!MaybeResponse[string] middlewares;
 
-    Response route(Request req, ServerConfig conf) {
+    Response route(Request http_req, ServerConfig conf) {
+        MiniwebRequest req = new MiniwebRequest(http_req);
+
         RoutingStore store;
         foreach (ent; routes) {
             if (ent.matches(req, store)) {
@@ -334,13 +337,13 @@ class Router {
         return null;
     }
 
-    void addRoute(T)(Matcher[] matchers, DList!Middleware mws, T delegate(Request) dg) {
+    void addRoute(T)(Matcher[] matchers, DList!Middleware mws, T delegate(MiniwebRequest) dg) {
         Callable!T cb;
         cb.set(dg);
         routes ~= RouteEntry(matchers, Handler.from(cb), mws);
     }
 
-    void addMiddleware(string name, MaybeResponse delegate(Request) dg) {
+    void addMiddleware(string name, MaybeResponse delegate(MiniwebRequest) dg) {
         Callable!MaybeResponse cb;
         cb.set(dg);
         middlewares[name] = cb;
@@ -422,19 +425,22 @@ private template MakeCallDispatcher(alias fn) {
             import std.meta : AliasSeq;
 
             static if (is(plainParamTy == Request)) {
+                enum Impl = "req.http," ~ tail;
+            }
+            else static if (is(plainParamTy == MiniwebRequest)) {
                 enum Impl = "req," ~ tail;
             }
             else static if (is(plainParamTy == HeaderBag)) {
-                enum Impl = "req.headers," ~ tail;
+                enum Impl = "req.http.headers," ~ tail;
             }
             else static if (is(plainParamTy == URI)) {
-                enum Impl = "req.uri," ~ tail;
+                enum Impl = "req.http.uri," ~ tail;
             }
             else static if (is(plainParamTy == QueryParamBag)) {
-                enum Impl = "req.uri.queryparams," ~ tail;
+                enum Impl = "req.http.uri.queryparams," ~ tail;
             }
             else static if (is(plainParamTy == HttpMethod)) {
-                enum Impl = "req.method," ~ tail;
+                enum Impl = "req.http.method," ~ tail;
             }
             else static if (containsUDA!(Header, paramUdas)) {
                 alias header_udas = filterUDAs!(Header, paramUdas);
@@ -456,10 +462,10 @@ private template MakeCallDispatcher(alias fn) {
                 }
 
                 static if (is(plainParamTy == string)) {
-                    enum Impl = "req.headers.getOne(\"" ~ Name ~ "\")," ~ tail;
+                    enum Impl = "req.http.headers.getOne(\"" ~ Name ~ "\")," ~ tail;
                 }
                 else static if (is(plainParamTy == string[])) {
-                    enum Impl = "req.headers.get(\"" ~ Name ~ "\")," ~ tail;
+                    enum Impl = "req.http.headers.get(\"" ~ Name ~ "\")," ~ tail;
                 }
                 else {
                     static assert(
@@ -521,10 +527,10 @@ private template MakeCallDispatcher(alias fn) {
                 }
 
                 static if (is(plainParamTy == string)) {
-                    enum Impl = "req.uri.queryparams.getOne(\"" ~ Name ~ "\"," ~ DefVal ~ ")," ~ tail;
+                    enum Impl = "req.http.uri.queryparams.getOne(\"" ~ Name ~ "\"," ~ DefVal ~ ")," ~ tail;
                 }
                 else static if (is(plainParamTy == string[])) {
-                    enum Impl = "req.uri.queryparams.get(\"" ~ Name ~ "\"," ~ DefVal ~ ")," ~ tail;
+                    enum Impl = "req.http.uri.queryparams.get(\"" ~ Name ~ "\"," ~ DefVal ~ ")," ~ tail;
                 }
                 else {
                     static assert(
@@ -546,7 +552,7 @@ private template MakeCallDispatcher(alias fn) {
                     "Cannot compile dispatcher: type `" ~ fullyQualifiedName!paramTy ~ "`"
                         ~ " that has a static function `fromRequest` needs to have one parameter of type `Request`"
                 );
-                enum Impl = "imported!\"" ~ moduleName!plainParamTy ~ "\"." ~ plainParamTy.stringof ~ ".fromRequest(req)," ~ tail;
+                enum Impl = "imported!\"" ~ moduleName!plainParamTy ~ "\"." ~ plainParamTy.stringof ~ ".fromRequest(req.http)," ~ tail;
             }
             else {
                 static assert(
@@ -580,7 +586,7 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
         matchers ~= uda.toMatcher();
     }
 
-    r.addRoute(matchers, middlewares, (Request req) {
+    r.addRoute(matchers, middlewares, (MiniwebRequest req) {
         static if (is(ReturnType!fn == void)) {
             mixin( "fn(" ~ args ~ ");" );
         } else static if (is(ReturnType!fn == Response)) {
@@ -626,7 +632,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
                 }
                 static if (is(ReturnType!fn == Option!Response)) {
                     pragma(msg, "Creating middleware handler on `" ~ fullyQualifiedName!fn ~ "` named '" ~ uda.name ~ "', calling with: `" ~ args ~ "`");
-                    r.addMiddleware(uda.name, (Request req) {
+                    r.addMiddleware(uda.name, (MiniwebRequest req) {
                         mixin( "return fn(" ~ args ~ ");" );
                     });
                 }
