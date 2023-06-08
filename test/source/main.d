@@ -49,3 +49,8 @@ void doSome1(HttpMethod method) {
 void doSome2() {
     writeln("called doSome2");
 }
+
+@GET @Route("/user/:username/?")
+void getUserByName(@PathParam string username) {
+    writeln("called getUserByName: username = ", username);
+}
