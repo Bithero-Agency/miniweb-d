@@ -84,7 +84,7 @@ Response someWhereOther() {
 - More bodytypes to move data
 - Allowing more returntypes, i.e. auto-serializing
 - Allowing detection of more request parameters
-- Routes with placeholders / regex
+- Routes with regex
 - Full http/1.1 support
 - http/2 support
 - ssl/tls support
