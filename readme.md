@@ -80,12 +80,35 @@ Response returnSomething(HeaderBag headers) {
 Response someWhereOther() {
     // ...
 }
+```
 
+Usage of path parameters:
+```d
 // To use path parameters, just use the syntax :<a-zA-Z0-9_> inside the route matcher.
 // @Route declarations also now support the `?` specified which make the character before it optional.
 @GET @Route("/user/:username/?")
 Response getUser(@PathParam string username) {
     // ...
+}
+```
+
+Custom return types:
+```d
+import std.conv : to;
+class CustomValue {
+    private int num;
+    this(int num) { this.num = num; }
+    Response toResponse(Request req) {
+        auto resp = Response.build_200_OK();
+        resp.setBody(
+            "host is: " ~ req.headers.getOne("host") ~ "\n"
+            ~ "num is: " ~ to!string(this.num) ~ "\n");
+        return resp;
+    }
+}
+@GET @Route("/customValue/:val")
+CustomValue getCustomValue(@PathParam string val) {
+    return new CustomValue( to!int(val) );
 }
 ```
 
