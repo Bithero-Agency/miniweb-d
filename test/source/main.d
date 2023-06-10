@@ -3,6 +3,7 @@ module test;
 import miniweb;
 
 import std.stdio;
+import std.json;
 
 mixin MiniWebMain!test;
 
@@ -76,4 +77,13 @@ class CustomValue {
 CustomValue getCustomValue(@PathParam string val) {
     import std.conv : to;
     return new CustomValue( to!int(val) );
+}
+
+@GET @Route("/testJson")
+JSONValue testJson() {
+    JSONValue test;
+    test["s"] = "Hello world";
+    test["n"] = 42;
+    test["a"] = [11, 22, 33];
+    return test;
 }
