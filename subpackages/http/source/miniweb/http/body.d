@@ -28,6 +28,8 @@ module miniweb.http.body;
 import miniweb.http.headers;
 import miniweb.http.client;
 
+import std.json;
+
 /** 
  * Interface for http response bodies
  */
@@ -73,5 +75,18 @@ class StringBody : ResponseBody {
 
 	void sendTo(HttpClient client) {
 		client.write(str);
+	}
+}
+
+/**
+ * A json response body; internally uses a StringBody and converts the given JSONValue when constructed
+ * into it's string representation.
+ */
+class StdJsonBody : StringBody {
+	this(JSONValue value) {
+		super(
+			value.toString(JSONOptions.none),
+			"application/json"
+		);
 	}
 }

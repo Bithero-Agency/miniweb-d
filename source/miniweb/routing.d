@@ -693,11 +693,21 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
     }
 
     r.addRoute(matchers, middlewares, (MiniwebRequest req) {
+        import std.json : JSONValue;
+
         alias retTy = ReturnType!fn;
         static if (is(retTy == void)) {
             mixin( "fn(" ~ args ~ ");" );
         } else static if (is(retTy == Response)) {
             mixin( "return fn(" ~ args ~ ");" );
+        } else static if (is(retTy == JSONValue)) {
+            mixin(
+                "import miniweb.http.response;" ~
+                "import miniweb.http.body;" ~
+                "auto resp = new Response(HttpResponseCode.OK_200);" ~
+                "resp.responseBody = new StdJsonBody( fn(" ~ args ~ ") );" ~
+                "return resp;"
+            );
         } else static if (hasMember!(retTy, "toResponse")) {
             alias toResponseMember = __traits(getMember, retTy, "toResponse");
             static assert (
