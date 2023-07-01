@@ -68,6 +68,9 @@ class MiniwebRequest {
 	/// Stores the mime_type this request has accepted to produce
 	public string accepted_product;
 
+	/// Stores the mime_type this request consumes
+	public string consumes;
+
 	this(Request http_request) {
 		this._http_request = http_request;
 	}

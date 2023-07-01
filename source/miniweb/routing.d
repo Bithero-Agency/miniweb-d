@@ -150,6 +150,14 @@ struct Produces {
     string type;
 }
 
+/** 
+ * UDA to specify which mimetypes a handler consumes;
+ * also used to restrict a handler to various types of input via the "Content-Type" header
+ */
+struct Consumes {
+    string type;
+}
+
 // ================================================================================
 
 /// Checks a condition if the request can be handled
@@ -336,7 +344,7 @@ auto parseHeaderQualityList(string header) {
 }
 
 /// Checks if the accepted formats of a request can be satisfied
-private class AcceptMatcher : Matcher {
+private abstract class BaseMimeMatcher : Matcher {
     private string[] raw_products;
     private Regex!char[] products_matcher;
 
@@ -370,7 +378,7 @@ private class AcceptMatcher : Matcher {
         return regex(res);
     }
 
-    private bool canSatisfy(string type) {
+    protected bool canSatisfy(string type) {
         import std.string : count;
         import std.regex : matchFirst;
 
@@ -393,6 +401,12 @@ private class AcceptMatcher : Matcher {
             return false;
         }
     }
+}
+
+private class AcceptMatcher : BaseMimeMatcher {
+    this(string[] products) {
+        super(products);
+    }
 
     bool matches(MiniwebRequest req, ref RoutingStore store) {
         if (!req.http.headers.has("Accept")) {
@@ -406,6 +420,33 @@ private class AcceptMatcher : Matcher {
                 req.accepted_product = e;
                 return true;
             }
+        }
+
+        // TODO: make a error code
+        return false;
+    }
+}
+
+private class ContentTypeMatcher : BaseMimeMatcher {
+    this(string[] types) {
+        super(types);
+    }
+
+    bool matches(MiniwebRequest req, ref RoutingStore store) {
+        if (!req.http.headers.has("Content-Type")) {
+            // TODO: make a error code
+            return false;
+        }
+
+        auto content_type_raw = req.http.headers.getOne("Content-Type");
+
+        import std.string : split, strip;
+        auto content_type = strip( content_type_raw.split(';')[0] );
+
+        if (this.canSatisfy(content_type)) {
+            req.consumes = content_type;
+            // TODO: copy all type parameters like charset to the request too
+            return true;
         }
 
         // TODO: make a error code
@@ -610,11 +651,11 @@ private template MakeCallDispatcher(alias fn) {
     alias identifiers = ParameterIdentifierTuple!fn;
     alias defaultvalues = ParameterDefaults!fn;
 
-    template Impl(size_t i = 0) {
+    template Impl(size_t i = 0, bool allowConsumes = true) {
         static if (i == types.length) {
             enum Impl = "";
         } else {
-            alias tail = Impl!(i+1);
+            alias tail = Impl!(i+1, true);
 
             alias paramSc = storageclasses[i];
             alias paramTy = types[i .. i+1];
@@ -808,6 +849,41 @@ private template MakeCallDispatcher(alias fn) {
                 );
                 enum Impl = "imported!\"" ~ moduleName!plainParamTy ~ "\"." ~ plainParamTy.stringof ~ ".fromRequest(req.http)," ~ tail;
             }
+            else static if (hasUDA!(fn, Consumes)) {
+                static assert (allowConsumes, "Cannot have two parameters be deserialized from the body of the request: `" ~ paramId ~ "` on `" ~ fullyQualifiedName!fn ~ "`");
+
+                enum FullType = fullyQualifiedName!paramTy;
+                enum Mod = moduleName!paramTy;
+                auto delMod(Range)(Range inp, Range mod) {
+                    import std.traits : isDynamicArray;
+                    import std.range.primitives : ElementEncodingType;
+                    static import std.ascii;
+                    static import std.uni;
+
+                    size_t i = 0;
+                    for (const size_t end = mod.length; i < end; ++i) {
+                        if (inp[i] != mod[i]) {
+                            break;
+                        }
+                    }
+                    inp = inp[i .. $];
+                    return inp;
+                }
+                enum Name = delMod(FullType, Mod);
+
+                // TODO: this needs to be a bit more dynamic!
+                static if (__traits(compiles, imported!"serialize_d.json.serializer".JsonMapper)) {
+                    // TODO: this needs a check if the incoming type is really json!
+                    enum Impl =
+                        "("
+                            ~ "(new imported!\"serialize_d.json.serializer\".JsonMapper())"
+                            ~ ".deserialize!( imported!\"" ~ Mod ~ "\"" ~ Name ~ " )( cast(string) req.http.reqBody.getBuffer() )"
+                        ~ "), "
+                        ~ Impl!(i+1, false);
+                } else {
+                    static assert(0, "Install serialize-d:json to support automatically json serialization!");
+                }
+            }
             else {
                 static assert(
                     0, "Cannot compile dispatcher: unknown type `" ~ fullyQualifiedName!paramTy ~ "`"
@@ -856,6 +932,23 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
             }
         }
         matchers ~= new AcceptMatcher(mixin("[" ~ CollectProducesAttrs!() ~ "]"));
+    }
+
+    static if (hasUDA!(fn, Consumes)) {
+        alias udas = getUDAs!(fn, Consumes);
+        template CollectConsumesAttrs(size_t i = 0) {
+            static if (i >= udas.length) {
+                enum CollectConsumesAttrs = "";
+            } else {
+                static if (is(udas[i] == Consumes)) {
+                    static assert (0, "Need instance of `@Consumes` on handler `" ~ fullyQualifiedName!fn ~ "`");
+                } else {
+                    static assert (udas[i].type != "", "@Consumes needs a mime type on handler `" ~ fullyQualifiedName!fn ~ "`");
+                    enum CollectConsumesAttrs = "\"" ~ udas[i].type ~ "\", " ~ CollectConsumesAttrs!(i+1);
+                }
+            }
+        }
+        matchers ~= new ContentTypeMatcher(mixin("[" ~ CollectConsumesAttrs!() ~ "]"));
     }
 
     r.addRoute(matchers, middlewares, (MiniwebRequest req) {
