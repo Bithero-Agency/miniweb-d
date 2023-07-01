@@ -897,15 +897,12 @@ private template MakeCallDispatcher(alias fn) {
     enum MakeCallDispatcher = Impl!();
 }
 
-private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Middleware middlewares) {
+private void addRoute(alias fn, string args)(Router r, DList!Middleware middlewares) {
     import std.traits : fullyQualifiedName, getUDAs, hasUDA, ReturnType, hasMember, isFunction, Parameters;
     import std.meta : AliasSeq;
 
     pragma(msg, "Creating route handler on `" ~ fullyQualifiedName!fn ~ "`, calling with: `" ~ args ~ "`");
     pragma(msg, "  Matchers: ");
-    static foreach (uda; matcher_udas) {
-        pragma(msg, "   - ", uda);
-    }
     static if (hasUDA!(fn, Middleware)) {
         static foreach (mw_uda; getUDAs!(fn, Middleware)) {
             pragma(msg, "   - ", mw_uda);
@@ -913,24 +910,41 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
     }
 
     Matcher[] matchers;
-    static foreach (uda; matcher_udas) {
-        matchers ~= uda.toMatcher();
+    static if (hasUDA!(fn, Route)) {
+        static foreach (uda; getUDAs!(fn, Route)) {
+            pragma(msg, "   - ", uda);
+            matchers ~= uda.toMatcher();
+        }
+    }
+
+    static if (hasUDA!(fn, Method)) {
+        static foreach (uda; getUDAs!(fn, Method)) {
+            pragma(msg, "   - ", uda);
+            matchers ~= uda.toMatcher();
+        }
+    }
+
+    static if (hasUDA!(fn, RequireHeader)) {
+        static foreach (uda; getUDAs!(fn, RequireHeader)) {
+            pragma(msg, "   - ", uda);
+            matchers ~= uda.toMatcher();
+        }
     }
 
     static if (hasUDA!(fn, Produces)) {
-        alias udas = getUDAs!(fn, Produces);
-        static foreach (uda; udas) {
+        alias p_udas = getUDAs!(fn, Produces);
+        static foreach (uda; p_udas) {
             pragma(msg, "   - ", uda);
         }
         template CollectProducesAttrs(size_t i = 0) {
-            static if (i >= udas.length) {
+            static if (i >= p_udas.length) {
                 enum CollectProducesAttrs = "";
             } else {
-                static if (is(udas[i] == Produces)) {
+                static if (is(p_udas[i] == Produces)) {
                     static assert (0, "Need instance of `@Produces` on handler `" ~ fullyQualifiedName!fn ~ "`");
                 } else {
-                    static assert (udas[i].type != "", "@Produces needs a mime type on handler `" ~ fullyQualifiedName!fn ~ "`");
-                    enum CollectProducesAttrs = "\"" ~ udas[i].type ~ "\", " ~ CollectProducesAttrs!(i+1);
+                    static assert (p_udas[i].type != "", "@Produces needs a mime type on handler `" ~ fullyQualifiedName!fn ~ "`");
+                    enum CollectProducesAttrs = "\"" ~ p_udas[i].type ~ "\", " ~ CollectProducesAttrs!(i+1);
                 }
             }
         }
@@ -938,19 +952,19 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
     }
 
     static if (hasUDA!(fn, Consumes)) {
-        alias udas = getUDAs!(fn, Consumes);
-        static foreach (uda; udas) {
+        alias c_udas = getUDAs!(fn, Consumes);
+        static foreach (uda; c_udas) {
             pragma(msg, "   - ", uda);
         }
         template CollectConsumesAttrs(size_t i = 0) {
-            static if (i >= udas.length) {
+            static if (i >= c_udas.length) {
                 enum CollectConsumesAttrs = "";
             } else {
-                static if (is(udas[i] == Consumes)) {
+                static if (is(c_udas[i] == Consumes)) {
                     static assert (0, "Need instance of `@Consumes` on handler `" ~ fullyQualifiedName!fn ~ "`");
                 } else {
-                    static assert (udas[i].type != "", "@Consumes needs a mime type on handler `" ~ fullyQualifiedName!fn ~ "`");
-                    enum CollectConsumesAttrs = "\"" ~ udas[i].type ~ "\", " ~ CollectConsumesAttrs!(i+1);
+                    static assert (c_udas[i].type != "", "@Consumes needs a mime type on handler `" ~ fullyQualifiedName!fn ~ "`");
+                    enum CollectConsumesAttrs = "\"" ~ c_udas[i].type ~ "\", " ~ CollectConsumesAttrs!(i+1);
                 }
             }
         }
@@ -1089,27 +1103,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
                 middlewares.insertBack(mw_uda);
             }
 
-            foreach (r_uda; getUDAs!(fn, Route)) {
-                static if (hasUDA!(fn, Method)) {
-                    foreach (m_uda; getUDAs!(fn, Method)) {
-                        static if (hasUDA!(fn, RequireHeader)) {
-                            foreach (rh_uda; getUDAs!(fn, RequireHeader)) {
-                                addRoute!(fn, args, AliasSeq!( r_uda, m_uda, rh_uda ))(r, middlewares);
-                            }
-                        } else {
-                            addRoute!(fn, args, AliasSeq!( r_uda, m_uda ))(r, middlewares);
-                        }
-                    }
-                } else {
-                    static if (hasUDA!(fn, RequireHeader)) {
-                        foreach (rh_uda; getUDAs!(fn, RequireHeader)) {
-                            addRoute!(fn, args, AliasSeq!( r_uda, rh_uda ))(r, middlewares);
-                        }
-                    } else {
-                        addRoute!(fn, args, AliasSeq!( r_uda ))(r, middlewares);
-                    }
-                }
-            }
+            addRoute!(fn, args)(r, middlewares);
 
         }
     }
