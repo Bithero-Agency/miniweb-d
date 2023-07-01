@@ -919,6 +919,9 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
 
     static if (hasUDA!(fn, Produces)) {
         alias udas = getUDAs!(fn, Produces);
+        static foreach (uda; udas) {
+            pragma(msg, "   - ", uda);
+        }
         template CollectProducesAttrs(size_t i = 0) {
             static if (i >= udas.length) {
                 enum CollectProducesAttrs = "";
@@ -936,6 +939,9 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
 
     static if (hasUDA!(fn, Consumes)) {
         alias udas = getUDAs!(fn, Consumes);
+        static foreach (uda; udas) {
+            pragma(msg, "   - ", uda);
+        }
         template CollectConsumesAttrs(size_t i = 0) {
             static if (i >= udas.length) {
                 enum CollectConsumesAttrs = "";
