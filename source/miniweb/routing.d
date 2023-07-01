@@ -142,6 +142,14 @@ struct PathParam {
     string name = null;
 }
 
+/** 
+ * UDA to specify which mimetypes a handler produces;
+ * also used to restrict a handler to various types that can be then specifed via the "Accept" header
+ */
+struct Produces {
+    string type;
+}
+
 // ================================================================================
 
 /// Checks a condition if the request can be handled
@@ -260,6 +268,147 @@ private class HeaderMatcher : Matcher {
             return true;
         }
         store.non_match_cause = NonMatchCause.Header;
+        return false;
+    }
+}
+
+auto parseHeaderQualityList(string header) {
+    import std.conv : to;
+    import std.string : stripRight, strip;
+
+    float[string] map;
+
+    enum State { VALUE, PARAMS, QUANTITY_KEY, QUANTITY_VALUE }
+    State state;
+    string v, q;
+    foreach (c; header) {
+        if (c == ',') {
+            // put v + q into map
+            float f = (q == "") ? 1.0f : to!float(strip(q));
+            if (f > 1.0f) { f = 1.0f; }
+            else if (f < 0.0f) { f = 0.0f; }
+            map[stripRight(v)] = f;
+            v = "";
+            q = "";
+            state = State.VALUE;
+            continue;
+        }
+        else if (c == ';') {
+            // switch to state PARAMS
+            state = State.PARAMS;
+            continue;
+        }
+
+        final switch (state) {
+            case State.VALUE: {
+                if (v.length == 0 && (c == ' ' || c == '\t')) {
+                    break;
+                }
+                v ~= c;
+                break;
+            }
+            case State.PARAMS: {
+                if (c == 'q') {
+                    state = State.QUANTITY_KEY;
+                }
+                break;
+            }
+            case State.QUANTITY_KEY: {
+                if (c == '=') {
+                    state = State.QUANTITY_VALUE;
+                }
+                break;
+            }
+            case State.QUANTITY_VALUE: {
+                q ~= c;
+                break;
+            }
+        }
+    }
+
+    if (v.length > 0) {
+        map[stripRight(v)] = (q == "") ? 1.0f : to!float(strip(q));
+    }
+
+    import std.array;
+    import std.algorithm;
+    return map.byPair.array.sort!"a[1]>b[1]".map!"a[0]";
+}
+
+/// Checks if the accepted formats of a request can be satisfied
+private class AcceptMatcher : Matcher {
+    private string[] raw_products;
+    private Regex!char[] products_matcher;
+
+    this(string[] products) {
+        foreach (v; products) {
+            this.add(v);
+        }
+    }
+
+    void add(string mime) {
+        this.products_matcher ~= makeMimeRegex(mime);
+
+        import std.string : count;
+        if (mime.count('*') < 1) {
+            this.raw_products ~= mime;
+        }
+    }
+
+    static Regex!char makeMimeRegex(string mime) {
+        string res = "^";
+        foreach (char c; mime) {
+            if (c == '*') {
+                res ~= ".*";
+            } else {
+                import std.conv : to;
+                import std.regex : escaper;
+                res ~= to!string( escaper([c]) );
+            }
+        }
+        res ~= "$";
+        return regex(res);
+    }
+
+    private bool canSatisfy(string type) {
+        import std.string : count;
+        import std.regex : matchFirst;
+
+        if (type.count!"a == '*'" > 0) {
+            auto re = makeMimeRegex(type);
+            foreach (p; raw_products) {
+                if (matchFirst(p, re)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        else {
+            import std.regex : matchFirst;
+            foreach (Regex!char re; this.products_matcher) {
+                if (matchFirst(type, re)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    bool matches(MiniwebRequest req, ref RoutingStore store) {
+        if (!req.http.headers.has("Accept")) {
+            // TODO: make a error code
+            return false;
+        }
+
+        auto accept = parseHeaderQualityList(req.http.headers.getOne("Accept"));
+        foreach (e; accept) {
+            if (this.canSatisfy(e)) {
+                req.accepted_product = e;
+                return true;
+            }
+        }
+
+        // TODO: make a error code
         return false;
     }
 }
@@ -692,6 +841,23 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
         matchers ~= uda.toMatcher();
     }
 
+    static if (hasUDA!(fn, Produces)) {
+        alias udas = getUDAs!(fn, Produces);
+        template CollectProducesAttrs(size_t i = 0) {
+            static if (i >= udas.length) {
+                enum CollectProducesAttrs = "";
+            } else {
+                static if (is(udas[i] == Produces)) {
+                    static assert (0, "Need instance of `@Produces` on handler `" ~ fullyQualifiedName!fn ~ "`");
+                } else {
+                    static assert (udas[i].type != "", "@Produces needs a mime type on handler `" ~ fullyQualifiedName!fn ~ "`");
+                    enum CollectProducesAttrs = "\"" ~ udas[i].type ~ "\", " ~ CollectProducesAttrs!(i+1);
+                }
+            }
+        }
+        matchers ~= new AcceptMatcher(mixin("[" ~ CollectProducesAttrs!() ~ "]"));
+    }
+
     r.addRoute(matchers, middlewares, (MiniwebRequest req) {
         import std.json : JSONValue;
 
@@ -726,6 +892,30 @@ private void addRoute(alias fn, string args, matcher_udas...)(Router r, DList!Mi
                 mixin( "return fn(" ~ args ~ ").toResponse(req.http);" );
             } else static if (is(toResponseParams == AliasSeq!(MiniwebRequest))) {
                 mixin( "return fn(" ~ args ~ ").toResponse(req);" );
+            }
+        } else static if (hasUDA!(fn, Produces)) {
+            auto val = mixin("fn(" ~ args ~ ")");
+
+            // TODO: this needs to be a bit more dynamic!
+            static if (__traits(compiles, imported!"serialize_d.json.serializer".JsonMapper)) {
+                import std.regex : regex, matchFirst;
+                auto re = "(\\/|\\+)json$";
+                if (matchFirst(req.accepted_product, re)) {
+                    import serialize_d.json.serializer;
+                    JsonMapper mapper;
+
+                    alias T = typeof(val);
+                    string str = mapper.serialize!T(val);
+
+                    import miniweb.http.response;
+                    auto resp = new Response(HttpResponseCode.OK_200);
+                    resp.setBody(str, req.accepted_product);
+                    return resp;
+                } else {
+                    assert(0, "Can only produce json for now");
+                }
+            } else {
+                static assert(0, "Install serialize-d:json to support automatically json serialization!");
             }
         } else {
             static assert(0, "`" ~ fullyQualifiedName!fn ~ "` needs either void, Response or a type that has a toResponse method as return type");

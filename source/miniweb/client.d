@@ -65,6 +65,9 @@ class MiniwebRequest {
 	/// Storage for path parameters
 	public string[string] pathParams;
 
+	/// Stores the mime_type this request has accepted to produce
+	public string accepted_product;
+
 	this(Request http_request) {
 		this._http_request = http_request;
 	}
