@@ -157,3 +157,32 @@ template filterUDAs(alias attribute, attribute_list...) {
  * See_Also: $(REF std.traits.hasUDAs) when wanting to check a symbol directly
  */
 enum containsUDA(alias attribute, attribute_list...) = filterUDAs!(attribute, attribute_list).length != 0;
+
+/**
+ * Extracts the base mimetype from any given mime type.
+ * 
+ * This means that for example `application/vnd.custom+json` gets turned into `application/json`.
+ * 
+ * Params:
+ *   inp = the input mimetype to get the base mimetype of
+ * 
+ * Returns: the base mimetype extracted
+ */
+string extractBaseMime(string inp) {
+    import std.string;
+
+    string res = "";
+
+    auto d1 = split(inp, "/");
+    res ~= d1[0];
+    res ~= '/';
+
+    auto d2 = split(d1[1], "+");
+    res ~= d2[$-1];
+
+    return res;
+}
+
+unittest {
+    assert (extractBaseMime("application/vnd.custom+json") == "application/json");
+}
