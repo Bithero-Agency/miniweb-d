@@ -851,38 +851,10 @@ private template MakeCallDispatcher(alias fn) {
             }
             else static if (hasUDA!(fn, Consumes)) {
                 static assert (allowConsumes, "Cannot have two parameters be deserialized from the body of the request: `" ~ paramId ~ "` on `" ~ fullyQualifiedName!fn ~ "`");
-
-                enum FullType = fullyQualifiedName!paramTy;
-                enum Mod = moduleName!paramTy;
-                auto delMod(Range)(Range inp, Range mod) {
-                    import std.traits : isDynamicArray;
-                    import std.range.primitives : ElementEncodingType;
-                    static import std.ascii;
-                    static import std.uni;
-
-                    size_t i = 0;
-                    for (const size_t end = mod.length; i < end; ++i) {
-                        if (inp[i] != mod[i]) {
-                            break;
-                        }
-                    }
-                    inp = inp[i .. $];
-                    return inp;
-                }
-                enum Name = delMod(FullType, Mod);
-
-                // TODO: this needs to be a bit more dynamic!
-                static if (__traits(compiles, imported!"serialize_d.json.serializer".JsonMapper)) {
-                    // TODO: this needs a check if the incoming type is really json!
-                    enum Impl =
-                        "("
-                            ~ "(new imported!\"serialize_d.json.serializer\".JsonMapper())"
-                            ~ ".deserialize!( imported!\"" ~ Mod ~ "\"" ~ Name ~ " )( cast(string) req.http.reqBody.getBuffer() )"
-                        ~ "), "
-                        ~ Impl!(i+1, false);
-                } else {
-                    static assert(0, "Install serialize-d:json to support automatically json serialization!");
-                }
+                import miniweb.utils;
+                enum Impl =
+                    "imported!\"miniweb.serialization\".requestbody_deserialize!( " ~ BuildImportCodeForType!(paramTy) ~ ", Modules )(req),"
+                    ~ Impl!(i+1, false);
             }
             else {
                 static assert(
@@ -897,7 +869,7 @@ private template MakeCallDispatcher(alias fn) {
     enum MakeCallDispatcher = Impl!();
 }
 
-private void addRoute(alias fn, string args)(Router r, DList!Middleware middlewares) {
+private void addRoute(alias fn, string args, Modules...)(Router r, DList!Middleware middlewares) {
     import std.traits : fullyQualifiedName, getUDAs, hasUDA, ReturnType, hasMember, isFunction, Parameters;
     import std.meta : AliasSeq;
 
@@ -1103,7 +1075,7 @@ Router initRouter(Modules...)(ServerConfig conf) {
                 middlewares.insertBack(mw_uda);
             }
 
-            addRoute!(fn, args)(r, middlewares);
+            addRoute!(fn, args, Modules)(r, middlewares);
 
         }
     }
