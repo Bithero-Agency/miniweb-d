@@ -15,6 +15,7 @@
 	"targetType": "library",
 	"subPackages": [
 		"./test",
-		"./subpackages/http"
+		"./subpackages/http",
+		"./subpackages/serialize_d"
 	]
 }
