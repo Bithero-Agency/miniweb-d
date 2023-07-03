@@ -1,11 +1,15 @@
 module test;
 
 import miniweb;
+import miniweb.serialization;
 
 import std.stdio;
 import std.json;
 
-mixin MiniWebMain!test;
+import miniweb.serialize_d;
+mixin(mkJsonMapper!());
+
+mixin MiniWebMain!(test);
 
 @RegisterMiddleware("a")
 MaybeResponse myfun() {
@@ -86,4 +90,21 @@ JSONValue testJson() {
     test["n"] = 42;
     test["a"] = [11, 22, 33];
     return test;
+}
+
+class MyValue {
+    int i = 42;
+}
+
+@GET @Route("/testJson2")
+@Produces("application/json")
+MyValue testJson2(@Header string accept) {
+    writeln("Accept: ", parseHeaderQualityList(accept));
+    return new MyValue();
+}
+
+@Post @Route("/testJson3")
+@Consumes("application/json")
+void testJson3(MyValue val) {
+    writeln("Handle testJson3; i=", val.i);
 }

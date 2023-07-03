@@ -1,7 +1,9 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"miniasync": "0.3.2",
-		"miniweb": {"path":".."}
+		"miniasync": "0.3.3",
+		"ministd": "0.2.1",
+		"miniweb": {"path":".."},
+		"serialize-d": "1.0.0"
 	}
 }

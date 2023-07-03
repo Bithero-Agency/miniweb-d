@@ -8,6 +8,10 @@
     "dependencies": {
         "miniweb": {
             "path": ".."
+        },
+        "serialize-d:json": "~>1.0.0",
+        "miniweb:serialize-d": {
+            "path": "../subpackages/serialize_d"
         }
     }
 }
