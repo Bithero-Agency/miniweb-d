@@ -186,3 +186,39 @@ string extractBaseMime(string inp) {
 unittest {
     assert (extractBaseMime("application/vnd.custom+json") == "application/json");
 }
+
+/**
+ * Compile-time helper to generate code to import any time via the "imported!" mecanism.
+ * 
+ * Params:
+ *   T = the type to generate code for
+ */
+template BuildImportCodeForType(alias T) {
+    import std.traits;
+
+    enum FullType = fullyQualifiedName!T;
+    enum Mod = moduleName!T;
+    auto delMod(Range)(Range inp, Range mod) {
+        import std.traits : isDynamicArray;
+        import std.range.primitives : ElementEncodingType;
+        static import std.ascii;
+        static import std.uni;
+
+        size_t i = 0;
+        for (const size_t end = mod.length; i < end; ++i) {
+            if (inp[i] != mod[i]) {
+                break;
+            }
+        }
+        inp = inp[i .. $];
+        return inp;
+    }
+    enum Name = delMod(FullType, Mod);
+
+    enum BuildImportCodeForType = "imported!\"" ~ Mod ~ "\"" ~ Name;
+}
+
+unittest {
+    import miniweb.serialization : Mapper;
+    static assert (BuildImportCodeForType!Mapper == "imported!\"miniweb.serialization\".Mapper");
+}
