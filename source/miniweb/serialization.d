@@ -9,11 +9,6 @@ struct Mapper {
     string[] types;
 }
 
-// interface MapperImpl(T) {
-//     T deserialize(void[] buffer);
-//     string serialize(auto ref T value);
-// }
-
 private template checkMapper(alias clazz) {
     import std.traits;
     static assert (
@@ -24,47 +19,6 @@ private template checkMapper(alias clazz) {
         __traits(compiles, __traits(getMember, clazz, "serialize")),
         "Mapper `" ~ fullyQualifiedName!clazz ~ "` needs to have a static method called `serialize`!"
     );
-}
-
-private template isAliasSeq(Args...) {
-    static if (Args.length != 1)
-        enum isAliasSeq = true;
-    else
-        enum isAliasSeq = false;
-}
-
-private template getMappers(alias symbol, names...) {
-    import std.traits;
-    import std.meta : Alias, AliasSeq, Filter;
-    static if (names.length == 0) {
-        alias getMappers = AliasSeq!();
-    } else {
-        alias tail = getMappers!(symbol, names[1 .. $]);
-        static if (!__traits(compiles, __traits(getMember, symbol, names[0]))) {
-            alias getMappers = tail;
-        } else {
-            alias member = __traits(getMember, symbol, names[0]);
-            static if (isAliasSeq!member ||
-                    (isType!member && !isAggregateType!member && !is(member == enum)))
-            {
-                alias getMappers = tail;
-            }
-            else static if (__traits(getOverloads, symbol, names[0], true).length > 0)
-            {
-                enum hasSpecificUDA(alias member) = hasUDA!(member, Mapper);
-                alias overloadsWithUDA = Filter!(hasSpecificUDA, __traits(getOverloads, symbol, names[0], true));
-                alias getMappers = AliasSeq!(overloadsWithUDA, tail);
-            }
-            else static if (hasUDA!(member, Mapper))
-            {
-                alias getMappers = AliasSeq!(member, tail);
-            }
-            else
-            {
-                alias getMappers = tail;
-            }
-        }
-    }
 }
 
 void checkMappers(Modules...)() {
