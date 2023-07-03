@@ -378,7 +378,7 @@ private abstract class BaseMimeMatcher : Matcher {
         return regex(res);
     }
 
-    protected bool canSatisfy(string type) {
+    protected bool canSatisfy(string type, out string __out) {
         import std.string : count;
         import std.regex : matchFirst;
 
@@ -386,6 +386,7 @@ private abstract class BaseMimeMatcher : Matcher {
             auto re = makeMimeRegex(type);
             foreach (p; raw_products) {
                 if (matchFirst(p, re)) {
+                    __out = p;
                     return true;
                 }
             }
@@ -395,6 +396,7 @@ private abstract class BaseMimeMatcher : Matcher {
             import std.regex : matchFirst;
             foreach (Regex!char re; this.products_matcher) {
                 if (matchFirst(type, re)) {
+                    __out = type;
                     return true;
                 }
             }
@@ -416,8 +418,9 @@ private class AcceptMatcher : BaseMimeMatcher {
 
         auto accept = parseHeaderQualityList(req.http.headers.getOne("Accept"));
         foreach (e; accept) {
-            if (this.canSatisfy(e)) {
-                req.accepted_product = e;
+            string res;
+            if (this.canSatisfy(e, res)) {
+                req.accepted_product = res;
                 return true;
             }
         }
@@ -443,7 +446,8 @@ private class ContentTypeMatcher : BaseMimeMatcher {
         import std.string : split, strip;
         auto content_type = strip( content_type_raw.split(';')[0] );
 
-        if (this.canSatisfy(content_type)) {
+        string __tmp;
+        if (this.canSatisfy(content_type, __tmp)) {
             req.consumes = content_type;
             // TODO: copy all type parameters like charset to the request too
             return true;
@@ -980,28 +984,8 @@ private void addRoute(alias fn, string args, Modules...)(Router r, DList!Middlew
             }
         } else static if (hasUDA!(fn, Produces)) {
             auto val = mixin("fn(" ~ args ~ ")");
-
-            // TODO: this needs to be a bit more dynamic!
-            static if (__traits(compiles, imported!"serialize_d.json.serializer".JsonMapper)) {
-                import std.regex : regex, matchFirst;
-                auto re = "(\\/|\\+)json$";
-                if (matchFirst(req.accepted_product, re)) {
-                    import serialize_d.json.serializer;
-                    JsonMapper mapper;
-
-                    alias T = typeof(val);
-                    string str = mapper.serialize!T(val);
-
-                    import miniweb.http.response;
-                    auto resp = new Response(HttpResponseCode.OK_200);
-                    resp.setBody(str, req.accepted_product);
-                    return resp;
-                } else {
-                    assert(0, "Can only produce json for now");
-                }
-            } else {
-                static assert(0, "Install serialize-d:json to support automatically json serialization!");
-            }
+            import miniweb.serialization;
+            return serialize_responsevalue!(typeof(val), Modules)(req.accepted_product, val);
         } else {
             static assert(0, "`" ~ fullyQualifiedName!fn ~ "` needs either void, Response or a type that has a toResponse method as return type");
         }
