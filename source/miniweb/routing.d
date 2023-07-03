@@ -412,7 +412,7 @@ private class AcceptMatcher : BaseMimeMatcher {
 
     bool matches(MiniwebRequest req, ref RoutingStore store) {
         if (!req.http.headers.has("Accept")) {
-            // TODO: make a error code
+            store.non_match_cause = NonMatchCause.Accept;
             return false;
         }
 
@@ -425,7 +425,7 @@ private class AcceptMatcher : BaseMimeMatcher {
             }
         }
 
-        // TODO: make a error code
+        store.non_match_cause = NonMatchCause.Accept;
         return false;
     }
 }
@@ -543,6 +543,7 @@ private enum NonMatchCause {
     None,
     Method,
     Header,
+    Accept,
 }
 
 /// Stores informations while routing
@@ -601,6 +602,9 @@ class Router {
         }
         else if (store.non_match_cause == NonMatchCause.Header && !conf.treat_required_header_failure_as_404) {
             return new Response(HttpResponseCode.Bad_Request_400);
+        }
+        else if (store.non_match_cause == NonMatchCause.Accept && !conf.treat_406_as_404) {
+            return new Response(HttpResponseCode.Not_Acceptable_406);
         }
 
         return null;
