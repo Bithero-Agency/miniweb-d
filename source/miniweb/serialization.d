@@ -99,7 +99,7 @@ T requestbody_deserialize(T, Modules...)(MiniwebRequest req) {
                     "import std.stdio;" ~ 
                     "writeln(\"[requestbody_deserialize] use `" ~ fullyQualifiedName!clazz ~ "` for mime '\" ~ base_mime ~ \"'\");" ~
                 "}" ~
-                "return (new " ~ BuildImportCodeForType!clazz ~ ").deserialize!(" ~ BuildImportCodeForType!T ~ ")(req.http.reqBody.getBuffer());" ~
+                "return " ~ BuildImportCodeForType!clazz ~ ".deserialize!(" ~ BuildImportCodeForType!T ~ ")(req.http.reqBody.getBuffer());" ~
             "}"
         ;
     }
@@ -135,7 +135,7 @@ Response serialize_responsevalue(T, Modules...)(string accepted_product, auto re
                     "import std.stdio;" ~ 
                     "writeln(\"[serialize_responsevalue] use `" ~ fullyQualifiedName!clazz ~ "` for mime '\" ~ base_mime ~ \"'\");" ~
                 "}" ~
-                "auto str = (new " ~ BuildImportCodeForType!clazz ~ ").serialize!(" ~ BuildImportCodeForType!T ~ ")(value);" ~
+                "auto str = " ~ BuildImportCodeForType!clazz ~ ".serialize!(" ~ BuildImportCodeForType!T ~ ")(value);" ~
                 "auto resp = new Response(HttpResponseCode.OK_200);" ~
                 "resp.setBody(str, accepted_product);" ~
                 "return resp;" ~
