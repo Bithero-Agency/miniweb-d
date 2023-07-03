@@ -137,6 +137,9 @@ template MiniWebStartup(Modules...) {
 			}
 		}
 
+		import miniweb.serialization;
+		checkMappers!(allMods);
+
 		Router router = initRouter!(allMods)(conf);
 
 		int exitCode = miniwebRunServer(conf, router);
