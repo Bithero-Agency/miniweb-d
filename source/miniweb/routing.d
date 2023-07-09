@@ -1070,5 +1070,9 @@ Router initRouter(Modules...)(ServerConfig conf) {
 
     r.sortRoutes();
 
+    pragma(msg, "Notice: miniweb will NOT recieve further updates; please switch to ninox-d_web!");
+    pragma(msg, "Notice: miniweb will NOT recieve further updates; please switch to ninox-d_web!");
+    pragma(msg, "Notice: miniweb will NOT recieve further updates; please switch to ninox-d_web!");
+
     return r;
 }
